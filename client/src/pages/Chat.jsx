@@ -1,0 +1,280 @@
+import { useState, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
+import { Send, Sparkles, Phone, ArrowLeft } from 'lucide-react';
+import useAuthStore from '../store/authStore';
+import { connectSocket, getSocket } from '../services/socket';
+import api from '../services/api';
+import toast from 'react-hot-toast';
+
+const Chat = () => {
+  const { userId: targetUserId } = useParams();
+  const { user: me, token } = useAuthStore();
+  const [conversations, setConversations] = useState([]);
+  const [activeChat, setActiveChat] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [typing, setTyping] = useState(null);
+  const [summarizing, setSummarizing] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const messagesEndRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+
+  const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
+
+  // Connect socket and load conversations
+  useEffect(() => {
+    const socket = connectSocket(token);
+
+    api.get('/users?limit=50').then(res => {
+      setConversations(res.data.users || []);
+      if (targetUserId) {
+        const target = res.data.users.find(u => u._id === targetUserId);
+        if (target) {
+          setActiveChat(target);
+          setShowSidebar(false); // Auto-hide sidebar on mobile when opening from link
+        }
+      }
+    });
+
+    socket.on('chat:message', (msg) => {
+      setMessages(prev => [...prev, msg]);
+    });
+
+    socket.on('chat:typing', ({ name }) => setTyping(name));
+    socket.on('chat:stop-typing', () => setTyping(null));
+
+    socket.on('chat:notification', ({ from, message: content }) => {
+      toast(`${from}: ${content}`, { icon: '💬' });
+    });
+
+    return () => {
+      socket.off('chat:message');
+      socket.off('chat:typing');
+      socket.off('chat:stop-typing');
+      socket.off('chat:notification');
+    };
+  }, [token, targetUserId]);
+
+  // Join room when active chat changes
+  useEffect(() => {
+    if (!activeChat) return;
+    const socket = getSocket();
+    const roomId = getRoomId(me._id, activeChat._id);
+
+    socket.emit('chat:join', roomId);
+
+    // Load message history from MongoDB
+    const loadHistory = async () => {
+      try {
+        const { data } = await api.get(`/messages/${roomId}`);
+        setMessages(data.messages || []);
+      } catch (err) {
+        console.error('Failed to load messages:', err);
+        setMessages([]);
+      }
+    };
+    loadHistory();
+
+    return () => {
+      socket.emit('chat:leave', roomId);
+    };
+  }, [activeChat, me._id]);
+
+  // Scroll to bottom
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSelectUser = (user) => {
+    setActiveChat(user);
+    setShowSidebar(false); // Hide sidebar on mobile after selecting
+  };
+
+  const handleBackToList = () => {
+    setShowSidebar(true);
+    setActiveChat(null);
+  };
+
+  const sendMessage = () => {
+    if (!input.trim() || !activeChat) return;
+    const socket = getSocket();
+    const roomId = getRoomId(me._id, activeChat._id);
+
+    socket.emit('chat:message', {
+      roomId,
+      receiverId: activeChat._id,
+      content: input.trim(),
+    });
+
+    socket.emit('chat:stop-typing', { roomId });
+    setInput('');
+  };
+
+  const handleTyping = () => {
+    const socket = getSocket();
+    if (!activeChat) return;
+    const roomId = getRoomId(me._id, activeChat._id);
+    socket.emit('chat:typing', { roomId });
+
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      socket.emit('chat:stop-typing', { roomId });
+    }, 2000);
+  };
+
+  const handleSummarize = async () => {
+    if (!activeChat) return;
+    setSummarizing(true);
+    try {
+      const roomId = getRoomId(me._id, activeChat._id);
+      const { data } = await api.post('/ai/summarize', { roomId });
+      toast.success('Summary generated!');
+      setMessages(prev => [...prev, {
+        _id: `summary-${Date.now()}`,
+        sender: { _id: 'ai', name: 'AI Assistant' },
+        content: `📋 **Summary**: ${data.summary}`,
+        type: 'ai-summary',
+        createdAt: new Date().toISOString(),
+      }]);
+    } catch (err) {
+      toast.error('Failed to summarize');
+    }
+    setSummarizing(false);
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-8rem)] gap-0 sm:gap-4 fade-in">
+      {/* Sidebar — full screen on mobile, fixed width on desktop */}
+      <div className={`${showSidebar ? 'flex' : 'hidden'} sm:flex w-full sm:w-72 glass rounded-2xl flex-col shrink-0 overflow-hidden`}>
+        <div className="p-4 border-b border-dark-400">
+          <h2 className="text-lg font-semibold text-white">Messages</h2>
+        </div>
+        <div className="flex-1 overflow-y-auto py-2">
+          {conversations.map((u) => (
+            <button
+              key={u._id}
+              onClick={() => handleSelectUser(u)}
+              className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left ${activeChat?._id === u._id ? 'bg-primary-600/20' : 'hover:bg-dark-500'}`}
+            >
+              <div className="relative flex-shrink-0">
+                {u.avatar ? (
+                  <img src={u.avatar} alt={u.name} className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-semibold">
+                    {u.name?.[0]?.toUpperCase()}
+                  </div>
+                )}
+                {u.isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-dark-600 pulse-dot" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-white font-medium truncate">{u.name}</p>
+                <p className="text-xs text-dark-200 truncate">{u.skills?.[0]?.name || 'Member'}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat Area — full screen on mobile, flex on desktop */}
+      {activeChat ? (
+        <div className={`${!showSidebar ? 'flex' : 'hidden'} sm:flex flex-1 glass rounded-2xl flex-col overflow-hidden`}>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-dark-400">
+            <div className="flex items-center gap-3">
+              {/* Back button — mobile only */}
+              <button onClick={handleBackToList} className="sm:hidden p-2 rounded-lg text-dark-100 hover:bg-dark-500 transition-colors -ml-1">
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              {activeChat.avatar ? (
+                <img src={activeChat.avatar} alt={activeChat.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover" />
+              ) : (
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-semibold text-sm sm:text-base">
+                  {activeChat.name?.[0]?.toUpperCase()}
+                </div>
+              )}
+              <div>
+                <p className="text-white font-medium text-sm sm:text-base">{activeChat.name}</p>
+                <p className="text-xs text-dark-200">{activeChat.isOnline ? '🟢 Online' : '⚪ Offline'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button onClick={handleSummarize} disabled={summarizing} className="p-2 rounded-lg text-primary-400 hover:bg-primary-600/20 transition-colors" title="AI Summarize">
+                <Sparkles className={`w-4 h-4 sm:w-5 sm:h-5 ${summarizing ? 'animate-spin' : ''}`} />
+              </button>
+              <button className="p-2 rounded-lg text-dark-100 hover:bg-dark-500 transition-colors">
+                <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+            {messages.length === 0 && (
+              <div className="text-center py-12 sm:py-20">
+                <p className="text-dark-200">No messages yet</p>
+                <p className="text-dark-300 text-sm">Say hello to start the conversation! 👋</p>
+              </div>
+            )}
+            {messages.map((msg) => {
+              const isOwn = msg.sender?._id === me._id || msg.sender === me._id;
+              const isAI = msg.type === 'ai-summary';
+              return (
+                <div key={msg._id || msg.createdAt} className={`flex ${isAI ? 'justify-center' : isOwn ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-sm ${
+                    isAI ? 'bg-primary-600/20 text-primary-200 border border-primary-500/20' :
+                    isOwn ? 'bg-primary-600 text-white rounded-br-md' :
+                    'bg-dark-500 text-dark-50 rounded-bl-md'
+                  }`}>
+                    {!isOwn && !isAI && <p className="text-xs text-primary-400 font-medium mb-1">{msg.sender?.name}</p>}
+                    <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                  </div>
+                </div>
+              );
+            })}
+            {typing && (
+              <div className="flex items-center gap-2 text-dark-200 text-sm">
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 bg-dark-200 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                  <span className="w-1.5 h-1.5 bg-dark-200 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                  <span className="w-1.5 h-1.5 bg-dark-200 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                </div>
+                {typing} is typing...
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input */}
+          <div className="p-3 sm:p-4 border-t border-dark-400">
+            <div className="flex gap-2 sm:gap-3">
+              <input
+                id="chat-input"
+                type="text"
+                value={input}
+                onChange={(e) => { setInput(e.target.value); handleTyping(); }}
+                onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+                placeholder="Type a message..."
+                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-700 border border-dark-400 rounded-xl text-white placeholder-dark-200 focus:outline-none focus:border-primary-500 transition-colors text-sm sm:text-base"
+              />
+              <button id="chat-send" onClick={sendMessage} className="px-4 sm:px-5 py-2.5 sm:py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-500 transition-colors">
+                <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className={`${!showSidebar ? 'flex' : 'hidden'} sm:flex flex-1 glass rounded-2xl items-center justify-center`}>
+          <div className="text-center p-8">
+            <div className="w-16 h-16 rounded-2xl bg-dark-500 flex items-center justify-center mx-auto mb-4">
+              <Send className="w-8 h-8 text-dark-200" />
+            </div>
+            <p className="text-dark-100 text-lg">Select a conversation</p>
+            <p className="text-dark-300 text-sm">Choose someone from the sidebar to start chatting</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Chat;

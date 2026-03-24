@@ -1,0 +1,145 @@
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import Message from '../models/Message.js';
+import { getRedis } from '../config/redis.js';
+
+// Track online users in memory (Redis-backed when available)
+const onlineUsers = new Map();
+
+export const setupSocket = (io) => {
+  // Auth middleware for socket
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
+      if (!token) return next(new Error('Authentication required'));
+
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id);
+      if (!user) return next(new Error('User not found'));
+
+      socket.user = user;
+      next();
+    } catch (error) {
+      next(new Error('Invalid token'));
+    }
+  });
+
+  io.on('connection', async (socket) => {
+    const userId = socket.user._id.toString();
+    console.log(`🟢 ${socket.user.name} connected`);
+
+    // Track online status
+    onlineUsers.set(userId, { socketId: socket.id, user: socket.user });
+    await User.findByIdAndUpdate(userId, { isOnline: true, lastSeen: new Date() });
+
+    // Cache in Redis if available
+    const redis = getRedis();
+    if (redis) {
+      await redis.sadd('online_users', userId);
+    }
+
+    // Broadcast online status
+    io.emit('user:online', { userId, name: socket.user.name });
+    socket.emit('users:online', Array.from(onlineUsers.keys()));
+
+    // --- CHAT ---
+    socket.on('chat:join', (roomId) => {
+      socket.join(roomId);
+      console.log(`💬 ${socket.user.name} joined room ${roomId}`);
+    });
+
+    socket.on('chat:leave', (roomId) => {
+      socket.leave(roomId);
+    });
+
+    socket.on('chat:message', async (data) => {
+      try {
+        const { roomId, receiverId, content } = data;
+
+        const message = await Message.create({
+          sender: userId,
+          receiver: receiverId,
+          roomId,
+          content,
+        });
+
+        const populated = await message.populate('sender', 'name avatar');
+
+        io.to(roomId).emit('chat:message', populated);
+
+        // Notify receiver if not in room
+        const receiverSocket = onlineUsers.get(receiverId);
+        if (receiverSocket) {
+          io.to(receiverSocket.socketId).emit('chat:notification', {
+            from: socket.user.name,
+            message: content.substring(0, 50),
+            roomId,
+          });
+        }
+      } catch (error) {
+        socket.emit('error', { message: error.message });
+      }
+    });
+
+    socket.on('chat:typing', ({ roomId }) => {
+      socket.to(roomId).emit('chat:typing', { userId, name: socket.user.name });
+    });
+
+    socket.on('chat:stop-typing', ({ roomId }) => {
+      socket.to(roomId).emit('chat:stop-typing', { userId });
+    });
+
+    // --- WEBRTC SIGNALING ---
+    socket.on('webrtc:offer', ({ to, offer, roomId }) => {
+      const target = onlineUsers.get(to);
+      if (target) {
+        io.to(target.socketId).emit('webrtc:offer', {
+          from: userId,
+          offer,
+          roomId,
+          callerName: socket.user.name,
+        });
+      }
+    });
+
+    socket.on('webrtc:answer', ({ to, answer }) => {
+      const target = onlineUsers.get(to);
+      if (target) {
+        io.to(target.socketId).emit('webrtc:answer', {
+          from: userId,
+          answer,
+        });
+      }
+    });
+
+    socket.on('webrtc:ice-candidate', ({ to, candidate }) => {
+      const target = onlineUsers.get(to);
+      if (target) {
+        io.to(target.socketId).emit('webrtc:ice-candidate', {
+          from: userId,
+          candidate,
+        });
+      }
+    });
+
+    socket.on('webrtc:end-call', ({ to }) => {
+      const target = onlineUsers.get(to);
+      if (target) {
+        io.to(target.socketId).emit('webrtc:end-call', { from: userId });
+      }
+    });
+
+    // --- DISCONNECT ---
+    socket.on('disconnect', async () => {
+      console.log(`🔴 ${socket.user.name} disconnected`);
+      onlineUsers.delete(userId);
+      await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
+
+      if (redis) {
+        await redis.srem('online_users', userId);
+      }
+
+      io.emit('user:offline', { userId });
+    });
+  });
+};
