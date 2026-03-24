@@ -5,7 +5,9 @@ let socket = null;
 export const connectSocket = (token) => {
   if (socket?.connected) return socket;
 
-  socket = io('/', {
+  const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+  
+  socket = io(backendUrl || '/', {
     auth: { token },
     transports: ['websocket', 'polling'],
   });
