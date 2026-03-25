@@ -16,8 +16,10 @@ export const getSocketServer = () => socketServer;
 export const emitToUsers = (io, userIds, event, payload) => {
   userIds.forEach((userId) => {
     const target = onlineUsers.get(userId?.toString());
-    if (target?.socketId) {
-      io.to(target.socketId).emit(event, payload);
+    if (target?.socketIds?.size) {
+      target.socketIds.forEach((socketId) => {
+        io.to(socketId).emit(event, payload);
+      });
     }
   });
 };
@@ -45,10 +47,23 @@ export const setupSocket = (io) => {
   io.on('connection', async (socket) => {
     const userId = socket.user._id.toString();
     console.log(`🟢 ${socket.user.name} connected`);
+    const existingSession = onlineUsers.get(userId);
+    const wasOffline = !existingSession;
 
     // Track online status
-    onlineUsers.set(userId, { socketId: socket.id, user: socket.user });
-    await User.findByIdAndUpdate(userId, { isOnline: true, lastSeen: new Date() });
+    if (existingSession) {
+      existingSession.socketIds.add(socket.id);
+      existingSession.user = socket.user;
+    } else {
+      onlineUsers.set(userId, {
+        socketIds: new Set([socket.id]),
+        user: socket.user,
+      });
+    }
+
+    if (wasOffline) {
+      await User.findByIdAndUpdate(userId, { isOnline: true, lastSeen: new Date() });
+    }
 
     // Cache in Redis if available
     const redis = getRedis();
@@ -57,7 +72,9 @@ export const setupSocket = (io) => {
     }
 
     // Broadcast online status
-    io.emit('user:online', { userId, name: socket.user.name });
+    if (wasOffline) {
+      io.emit('user:online', { userId, name: socket.user.name });
+    }
     socket.emit('users:online', Array.from(onlineUsers.keys()));
 
     // --- CHAT ---
@@ -87,11 +104,13 @@ export const setupSocket = (io) => {
 
         // Notify receiver if not in room
         const receiverSocket = onlineUsers.get(receiverId);
-        if (receiverSocket) {
-          io.to(receiverSocket.socketId).emit('chat:notification', {
-            from: socket.user.name,
-            message: content.substring(0, 50),
-            roomId,
+        if (receiverSocket?.socketIds?.size) {
+          receiverSocket.socketIds.forEach((socketId) => {
+            io.to(socketId).emit('chat:notification', {
+              from: socket.user.name,
+              message: content.substring(0, 50),
+              roomId,
+            });
           });
         }
       } catch (error) {
@@ -110,46 +129,64 @@ export const setupSocket = (io) => {
     // --- WEBRTC SIGNALING ---
     socket.on('webrtc:offer', ({ to, offer, roomId }) => {
       const target = onlineUsers.get(to);
-      if (target) {
-        io.to(target.socketId).emit('webrtc:offer', {
-          from: userId,
-          offer,
-          roomId,
-          callerName: socket.user.name,
+      if (target?.socketIds?.size) {
+        target.socketIds.forEach((socketId) => {
+          io.to(socketId).emit('webrtc:offer', {
+            from: userId,
+            offer,
+            roomId,
+            callerName: socket.user.name,
+          });
         });
       }
     });
 
     socket.on('webrtc:answer', ({ to, answer }) => {
       const target = onlineUsers.get(to);
-      if (target) {
-        io.to(target.socketId).emit('webrtc:answer', {
-          from: userId,
-          answer,
+      if (target?.socketIds?.size) {
+        target.socketIds.forEach((socketId) => {
+          io.to(socketId).emit('webrtc:answer', {
+            from: userId,
+            answer,
+          });
         });
       }
     });
 
     socket.on('webrtc:ice-candidate', ({ to, candidate }) => {
       const target = onlineUsers.get(to);
-      if (target) {
-        io.to(target.socketId).emit('webrtc:ice-candidate', {
-          from: userId,
-          candidate,
+      if (target?.socketIds?.size) {
+        target.socketIds.forEach((socketId) => {
+          io.to(socketId).emit('webrtc:ice-candidate', {
+            from: userId,
+            candidate,
+          });
         });
       }
     });
 
     socket.on('webrtc:end-call', ({ to }) => {
       const target = onlineUsers.get(to);
-      if (target) {
-        io.to(target.socketId).emit('webrtc:end-call', { from: userId });
+      if (target?.socketIds?.size) {
+        target.socketIds.forEach((socketId) => {
+          io.to(socketId).emit('webrtc:end-call', { from: userId });
+        });
       }
     });
 
     // --- DISCONNECT ---
     socket.on('disconnect', async () => {
       console.log(`🔴 ${socket.user.name} disconnected`);
+      const existingSession = onlineUsers.get(userId);
+
+      if (existingSession) {
+        existingSession.socketIds.delete(socket.id);
+      }
+
+      if (existingSession?.socketIds?.size) {
+        return;
+      }
+
       onlineUsers.delete(userId);
       await User.findByIdAndUpdate(userId, { isOnline: false, lastSeen: new Date() });
 
