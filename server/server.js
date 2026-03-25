@@ -71,12 +71,13 @@ app.use('/uploads', express.static('uploads'));
 const authLimiter = createLimiter({
   max: Number(process.env.AUTH_RATE_LIMIT_MAX || 100),
   skipSuccessfulRequests: true,
+  skip: (req) => req.method !== 'POST',
   message: 'Too many auth attempts, please try again later',
 });
 
 const apiLimiter = createLimiter({
   max: Number(process.env.API_RATE_LIMIT_MAX || 500),
-  skip: (req) => req.path === '/health',
+  skip: (req) => req.path === '/health' || req.path.startsWith('/auth'),
   message: 'Too many requests, please try again later',
 });
 
