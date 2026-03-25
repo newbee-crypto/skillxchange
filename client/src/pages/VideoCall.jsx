@@ -6,11 +6,28 @@ import { connectSocket, getSocket } from '../services/socket';
 import api from '../services/api';
 import toast from 'react-hot-toast';
 
+const TURN_URLS = (import.meta.env.VITE_TURN_URLS || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
 const ICE_SERVERS = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' },
+    ...(
+      TURN_URLS.length > 0
+        ? [{
+            urls: TURN_URLS,
+            username: import.meta.env.VITE_TURN_USERNAME,
+            credential: import.meta.env.VITE_TURN_CREDENTIAL,
+          }]
+        : []
+    ),
   ],
+  iceCandidatePoolSize: 10,
 };
 
 const VideoCall = () => {
