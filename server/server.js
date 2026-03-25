@@ -19,6 +19,8 @@ import { setupSocket } from './socket/index.js';
 const app = express();
 const httpServer = createServer(app);
 
+app.set('trust proxy', 1);
+
 // Socket.io
 const io = new Server(httpServer, {
   cors: {
@@ -39,9 +41,10 @@ app.use('/uploads', express.static('uploads'));
 // Rate limiting
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts, please try again later' },
 });
 
