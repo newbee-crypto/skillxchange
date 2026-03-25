@@ -19,11 +19,24 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
   </div>
 );
 
+const StatCardSkeleton = () => (
+  <div className="glass rounded-xl p-5 animate-pulse">
+    <div className="flex items-center gap-3">
+      <div className="w-10 h-10 rounded-lg bg-dark-500" />
+      <div className="flex-1">
+        <div className="h-6 w-16 bg-dark-500 rounded mb-2" />
+        <div className="h-4 w-24 bg-dark-600 rounded" />
+      </div>
+    </div>
+  </div>
+);
+
 const Dashboard = () => {
   const { user, token } = useAuthStore();
   const [stats, setStats] = useState({ users: 0, bookings: 0, messages: 0 });
   const [suggestions, setSuggestions] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const syncRecentUserPresence = useCallback((onlineIds) => {
     setRecentUsers((prev) => prev.map((recentUser) => ({
@@ -34,6 +47,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
         const [usersRes, bookingsRes, aiRes] = await Promise.allSettled([
           api.get('/users?limit=6'),
@@ -53,6 +67,8 @@ const Dashboard = () => {
         }
       } catch (err) {
         console.error('Dashboard fetch error:', err);
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
@@ -96,25 +112,48 @@ const Dashboard = () => {
           <h1 className="text-3xl font-bold text-white mb-2">
             Welcome back, <span className="gradient-text">{user?.name}</span> 👋
           </h1>
-          <p className="text-dark-100 text-lg max-w-xl">
-            Discover new skills, connect with experts, and accelerate your learning journey.
-          </p>
-          <div className="flex gap-3 mt-6">
-            <Link to="/search" className="px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-medium rounded-xl hover:from-primary-500 hover:to-primary-400 transition-all flex items-center gap-2 shadow-lg shadow-primary-500/20">
-              Explore Skills <ArrowRight className="w-4 h-4" />
-            </Link>
-            <Link to="/profile" className="px-5 py-2.5 bg-dark-500 text-dark-50 font-medium rounded-xl hover:bg-dark-400 transition-colors">
-              Edit Profile
-            </Link>
-          </div>
+          {loading ? (
+            <>
+              <div className="h-5 w-full max-w-xl bg-dark-600 rounded mt-3" />
+              <div className="h-5 w-3/4 max-w-lg bg-dark-600 rounded mt-2" />
+              <div className="flex gap-3 mt-6">
+                <div className="h-11 w-36 bg-dark-500 rounded-xl" />
+                <div className="h-11 w-28 bg-dark-600 rounded-xl" />
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-dark-100 text-lg max-w-xl">
+                Discover new skills, connect with experts, and accelerate your learning journey.
+              </p>
+              <div className="flex gap-3 mt-6">
+                <Link to="/search" className="px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-medium rounded-xl hover:from-primary-500 hover:to-primary-400 transition-all flex items-center gap-2 shadow-lg shadow-primary-500/20">
+                  Explore Skills <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link to="/profile" className="px-5 py-2.5 bg-dark-500 text-dark-50 font-medium rounded-xl hover:bg-dark-400 transition-colors">
+                  Edit Profile
+                </Link>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard icon={Users} label="Active Users" value={stats.users} color="bg-gradient-to-br from-blue-500 to-blue-600" />
-        <StatCard icon={Calendar} label="Your Bookings" value={stats.bookings} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
-        <StatCard icon={TrendingUp} label="Your Skills" value={user?.skills?.length || 0} color="bg-gradient-to-br from-purple-500 to-purple-600" />
+        {loading ? (
+          <>
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </>
+        ) : (
+          <>
+            <StatCard icon={Users} label="Active Users" value={stats.users} color="bg-gradient-to-br from-blue-500 to-blue-600" />
+            <StatCard icon={Calendar} label="Your Bookings" value={stats.bookings} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
+            <StatCard icon={TrendingUp} label="Your Skills" value={user?.skills?.length || 0} color="bg-gradient-to-br from-purple-500 to-purple-600" />
+          </>
+        )}
       </div>
 
       {/* AI Suggestions */}
