@@ -109,7 +109,12 @@ export const setupSocket = (io) => {
         // Notify receiver if not in room
         const receiverSocket = onlineUsers.get(receiverId);
         if (receiverSocket?.socketIds?.size) {
+          const roomMembers = io.sockets.adapter.rooms.get(roomId) || new Set();
           receiverSocket.socketIds.forEach((socketId) => {
+            if (roomMembers.has(socketId)) {
+              return;
+            }
+
             io.to(socketId).emit('chat:notification', {
               from: socket.user.name,
               message: content.substring(0, 50),
