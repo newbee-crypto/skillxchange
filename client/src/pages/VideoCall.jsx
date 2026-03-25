@@ -36,6 +36,7 @@ const VideoCall = () => {
   const timerRef = useRef(null);
   const callTimeoutRef = useRef(null);
   const callingUserRef = useRef(null);
+  const pendingIceCandidatesRef = useRef([]);
 
   // Load users list when in standalone mode
   useEffect(() => {
@@ -56,6 +57,7 @@ const VideoCall = () => {
       peerConnectionRef.current = null;
     }
     remoteStreamRef.current = null;
+    pendingIceCandidatesRef.current = [];
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     clearInterval(timerRef.current);
@@ -97,6 +99,7 @@ const VideoCall = () => {
       if (pc.connectionState === 'connected') {
         setCallState('connected');
         setIncomingCall(null);
+        clearTimeout(callTimeoutRef.current);
         setCallStatusText(`In call with ${remoteUser?.name || 'participant'}`);
         timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       }
@@ -165,6 +168,11 @@ const VideoCall = () => {
       const pc = createPeerConnection(incomingCall.from);
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCall.offer));
 
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const candidate = pendingIceCandidatesRef.current.shift();
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      }
+
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
 
@@ -191,12 +199,26 @@ const VideoCall = () => {
   const handleAnswer = async (data) => {
     if (peerConnectionRef.current) {
       await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = setTimeout(() => {
+        toast.error('Connection could not be established');
+        resetCallState('Connection timed out');
+      }, 45000);
+
+      while (pendingIceCandidatesRef.current.length > 0) {
+        const candidate = pendingIceCandidatesRef.current.shift();
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      }
     }
   };
 
   const handleIceCandidate = async (data) => {
     if (peerConnectionRef.current) {
-      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+      if (peerConnectionRef.current.remoteDescription) {
+        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+      } else {
+        pendingIceCandidatesRef.current.push(data.candidate);
+      }
     }
   };
 
