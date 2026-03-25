@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import useAuthStore from './store/authStore';
@@ -13,12 +14,30 @@ import Bookings from './pages/Bookings';
 import Payment from './pages/Payment';
 
 const ProtectedRoute = ({ children }) => {
-  const { user } = useAuthStore();
+  const { user, hydrating } = useAuthStore();
+
+  if (hydrating) {
+    return (
+      <div className="min-h-screen bg-dark-900 flex items-center justify-center px-4">
+        <div className="glass rounded-2xl px-6 py-5 flex items-center gap-3 text-dark-50">
+          <div className="w-5 h-5 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin" />
+          <span className="text-sm sm:text-base">Checking your session...</span>
+        </div>
+      </div>
+    );
+  }
+
   if (!user) return <Navigate to="/login" replace />;
   return children;
 };
 
 const App = () => {
+  const fetchMe = useAuthStore((state) => state.fetchMe);
+
+  useEffect(() => {
+    fetchMe();
+  }, [fetchMe]);
+
   return (
     <BrowserRouter>
       <Toaster

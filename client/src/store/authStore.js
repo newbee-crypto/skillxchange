@@ -5,6 +5,7 @@ const useAuthStore = create((set, get) => ({
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   token: localStorage.getItem('token') || null,
   loading: false,
+  hydrating: true,
   error: null,
 
   signup: async (name, email, password) => {
@@ -40,7 +41,7 @@ const useAuthStore = create((set, get) => ({
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    set({ user: null, token: null });
+    set({ user: null, token: null, hydrating: false });
   },
 
   updateUser: (user) => {
@@ -49,12 +50,21 @@ const useAuthStore = create((set, get) => ({
   },
 
   fetchMe: async () => {
+    const token = get().token;
+
+    if (!token) {
+      set({ user: null, hydrating: false });
+      return;
+    }
+
     try {
       const { data } = await api.get('/auth/me');
       localStorage.setItem('user', JSON.stringify(data.user));
-      set({ user: data.user });
+      set({ user: data.user, hydrating: false });
     } catch {
-      // Token may be expired
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      set({ user: null, token: null, hydrating: false });
     }
   },
 }));
