@@ -21,6 +21,25 @@ const Chat = () => {
   const activeRoomRef = useRef(null);
 
   const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
+  const mergeIncomingMessage = useCallback((incomingMessage) => {
+    setMessages((prev) => {
+      const existingIndex = prev.findIndex((message) => (
+        incomingMessage.clientMessageId && message.clientMessageId === incomingMessage.clientMessageId
+      ));
+
+      if (existingIndex !== -1) {
+        const nextMessages = [...prev];
+        nextMessages[existingIndex] = incomingMessage;
+        return nextMessages;
+      }
+
+      if (incomingMessage._id && prev.some((message) => message._id === incomingMessage._id)) {
+        return prev;
+      }
+
+      return [...prev, incomingMessage];
+    });
+  }, []);
 
   const sortConversations = useCallback((items) => (
     [...items].sort((a, b) => {
@@ -109,7 +128,7 @@ const Chat = () => {
 
     const handleIncomingMessage = (msg) => {
       if (msg.roomId === activeRoomRef.current) {
-        setMessages((prev) => [...prev, msg]);
+        mergeIncomingMessage(msg);
       }
       updateConversationPreview(msg);
     };
@@ -141,7 +160,7 @@ const Chat = () => {
       socket.off('user:offline');
       socket.off('chat:notification');
     };
-  }, [loadConversations, token, updateConversationPresence, updateConversationPreview]);
+  }, [loadConversations, mergeIncomingMessage, token, updateConversationPresence, updateConversationPreview]);
 
   useEffect(() => {
     if (!activeChat) return undefined;
@@ -187,11 +206,24 @@ const Chat = () => {
     const socket = getSocket();
     const roomId = getRoomId(me._id, activeChat._id);
     const content = input.trim();
+    const clientMessageId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    mergeIncomingMessage({
+      _id: clientMessageId,
+      clientMessageId,
+      sender: { _id: me._id, name: me.name },
+      receiver: activeChat._id,
+      roomId,
+      content,
+      createdAt: new Date().toISOString(),
+      pending: true,
+    });
 
     socket.emit('chat:message', {
       roomId,
       receiverId: activeChat._id,
       content,
+      clientMessageId,
     });
 
     updateConversationPreview({
@@ -329,6 +361,7 @@ const Chat = () => {
                   }`}>
                     {!isOwn && !isAI && <p className="text-xs text-primary-400 font-medium mb-1">{msg.sender?.name}</p>}
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                    {msg.pending && <p className="mt-1 text-[10px] opacity-70">Sending...</p>}
                   </div>
                 </div>
               );

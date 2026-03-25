@@ -89,7 +89,7 @@ export const setupSocket = (io) => {
 
     socket.on('chat:message', async (data) => {
       try {
-        const { roomId, receiverId, content } = data;
+        const { roomId, receiverId, content, clientMessageId } = data;
 
         const message = await Message.create({
           sender: userId,
@@ -99,8 +99,12 @@ export const setupSocket = (io) => {
         });
 
         const populated = await message.populate('sender', 'name avatar');
+        const payload = {
+          ...populated.toObject(),
+          clientMessageId: clientMessageId || null,
+        };
 
-        io.to(roomId).emit('chat:message', populated);
+        io.to(roomId).emit('chat:message', payload);
 
         // Notify receiver if not in room
         const receiverSocket = onlineUsers.get(receiverId);
