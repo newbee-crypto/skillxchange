@@ -32,6 +32,7 @@ const VideoCall = () => {
   const remoteVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
+  const remoteStreamRef = useRef(null);
   const timerRef = useRef(null);
   const callTimeoutRef = useRef(null);
   const callingUserRef = useRef(null);
@@ -54,6 +55,7 @@ const VideoCall = () => {
       peerConnectionRef.current.close();
       peerConnectionRef.current = null;
     }
+    remoteStreamRef.current = null;
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     clearInterval(timerRef.current);
@@ -84,8 +86,10 @@ const VideoCall = () => {
     };
 
     pc.ontrack = (e) => {
+      remoteStreamRef.current = e.streams[0];
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = e.streams[0];
+        remoteVideoRef.current.play?.().catch(() => {});
       }
     };
 
@@ -223,6 +227,18 @@ const VideoCall = () => {
       }
     }
   };
+
+  useEffect(() => {
+    if (localVideoRef.current && localStreamRef.current && localVideoRef.current.srcObject !== localStreamRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+      localVideoRef.current.play?.().catch(() => {});
+    }
+
+    if (remoteVideoRef.current && remoteStreamRef.current && remoteVideoRef.current.srcObject !== remoteStreamRef.current) {
+      remoteVideoRef.current.srcObject = remoteStreamRef.current;
+      remoteVideoRef.current.play?.().catch(() => {});
+    }
+  });
 
   useEffect(() => {
     const socket = connectSocket(token);
