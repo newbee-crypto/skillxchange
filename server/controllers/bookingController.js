@@ -1,5 +1,24 @@
 import Booking from '../models/Booking.js';
 
+export const getBookingById = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.id).populate(['requester', 'provider']);
+
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+
+    const isProvider = booking.provider?._id?.toString() === req.user._id.toString();
+    const isRequester = booking.requester?._id?.toString() === req.user._id.toString();
+
+    if (!isProvider && !isRequester) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    res.json({ booking });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const createBooking = async (req, res) => {
   try {
     const { providerId, skill, dateTime, duration, price, notes } = req.body;

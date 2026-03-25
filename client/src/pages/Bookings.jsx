@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Clock, Check, X, Video, CreditCard, Plus, ChevronDown } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
+import useVisibilityRefresh from '../hooks/useVisibilityRefresh';
+import { emitBookingChanged, subscribeToBookingChanges } from '../services/liveUpdates';
 import toast from 'react-hot-toast';
 
 const Bookings = () => {
@@ -22,16 +24,18 @@ const Bookings = () => {
     notes: '',
   });
 
-  const fetchBookings = async () => {
+  const fetchBookings = useCallback(async () => {
+    setLoading(true);
     try {
       const params = filter !== 'all' ? `?type=${filter}` : '';
       const { data } = await api.get(`/bookings${params}`);
       setBookings(data.bookings || []);
     } catch (err) {
       toast.error('Failed to load bookings');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, [filter]);
 
   // Load users for the dropdown
   useEffect(() => {
@@ -40,7 +44,17 @@ const Bookings = () => {
     });
   }, []);
 
-  useEffect(() => { fetchBookings(); }, [filter]);
+  useEffect(() => {
+    fetchBookings();
+  }, [fetchBookings]);
+
+  useVisibilityRefresh(fetchBookings);
+
+  useEffect(() => {
+    return subscribeToBookingChanges(() => {
+      fetchBookings();
+    });
+  }, [fetchBookings]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -49,11 +63,12 @@ const Bookings = () => {
       return;
     }
     try {
-      await api.post('/bookings', form);
+      const { data } = await api.post('/bookings', form);
       toast.success('Booking created!');
       setShowNewForm(false);
       setForm({ providerId: '', skill: '', dateTime: '', duration: 60, price: 0, notes: '' });
-      fetchBookings();
+      emitBookingChanged(data.booking);
+      setBookings((prev) => [data.booking, ...prev]);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Failed to create booking');
     }
@@ -61,9 +76,12 @@ const Bookings = () => {
 
   const handleStatus = async (id, status) => {
     try {
-      await api.patch(`/bookings/${id}/status`, { status });
+      const { data } = await api.patch(`/bookings/${id}/status`, { status });
       toast.success(`Booking ${status}`);
-      fetchBookings();
+      setBookings((prev) => prev.map((booking) => (
+        booking._id === id ? data.booking : booking
+      )));
+      emitBookingChanged(data.booking);
     } catch (err) {
       toast.error('Failed to update');
     }

@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { CreditCard, Check, Shield, Zap } from 'lucide-react';
 import api from '../services/api';
+import useVisibilityRefresh from '../hooks/useVisibilityRefresh';
+import { emitBookingChanged, subscribeToBookingChanges } from '../services/liveUpdates';
 import toast from 'react-hot-toast';
 
 const Payment = () => {
@@ -11,13 +13,29 @@ const Payment = () => {
   const [processing, setProcessing] = useState(false);
   const [paid, setPaid] = useState(false);
 
-  useEffect(() => {
-    api.get('/bookings').then(res => {
-      const b = res.data.bookings?.find(b => b._id === bookingId);
-      if (b) setBooking(b);
-      else toast.error('Booking not found');
-    });
+  const fetchBooking = useCallback(async () => {
+    try {
+      const { data } = await api.get(`/bookings/${bookingId}`);
+      setBooking(data.booking);
+      setPaid(data.booking?.paymentStatus === 'paid');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Booking not found');
+    }
   }, [bookingId]);
+
+  useEffect(() => {
+    fetchBooking();
+  }, [fetchBooking]);
+
+  useVisibilityRefresh(fetchBooking, !paid);
+
+  useEffect(() => {
+    return subscribeToBookingChanges((updatedBooking) => {
+      if (updatedBooking?._id === bookingId) {
+        fetchBooking();
+      }
+    });
+  }, [bookingId, fetchBooking]);
 
   const handlePay = async () => {
     setProcessing(true);
@@ -27,7 +45,9 @@ const Payment = () => {
         amount: booking.price,
       });
       await api.post('/payments/confirm', { paymentId: data.payment.id });
+      setBooking(data.booking);
       setPaid(true);
+      emitBookingChanged(data.booking);
       toast.success('Payment successful!');
     } catch (err) {
       toast.error('Payment failed');
