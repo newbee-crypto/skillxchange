@@ -20,6 +20,14 @@ const Chat = () => {
   const typingTimeoutRef = useRef(null);
 
   const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
+  const updateUserPresence = (userId, isOnline) => {
+    setConversations((prev) => prev.map((user) => (
+      user._id === userId ? { ...user, isOnline } : user
+    )));
+    setActiveChat((prev) => (
+      prev?._id === userId ? { ...prev, isOnline } : prev
+    ));
+  };
 
   // Connect socket and load conversations
   useEffect(() => {
@@ -42,6 +50,15 @@ const Chat = () => {
 
     socket.on('chat:typing', ({ name }) => setTyping(name));
     socket.on('chat:stop-typing', () => setTyping(null));
+    socket.on('users:online', (ids) => {
+      setConversations((prev) => prev.map((user) => ({
+        ...user,
+        isOnline: ids.includes(user._id),
+      })));
+      setActiveChat((prev) => prev ? { ...prev, isOnline: ids.includes(prev._id) } : prev);
+    });
+    socket.on('user:online', ({ userId }) => updateUserPresence(userId, true));
+    socket.on('user:offline', ({ userId }) => updateUserPresence(userId, false));
 
     socket.on('chat:notification', ({ from, message: content }) => {
       toast(`${from}: ${content}`, { icon: '💬' });
@@ -51,6 +68,9 @@ const Chat = () => {
       socket.off('chat:message');
       socket.off('chat:typing');
       socket.off('chat:stop-typing');
+      socket.off('users:online');
+      socket.off('user:online');
+      socket.off('user:offline');
       socket.off('chat:notification');
     };
   }, [token, targetUserId]);

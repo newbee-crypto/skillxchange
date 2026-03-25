@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { Users, Calendar, MessageCircle, TrendingUp, Sparkles, ArrowRight } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
+import { connectSocket } from '../services/socket';
 
 const StatCard = ({ icon: Icon, label, value, color }) => (
   <div className="glass rounded-xl p-5 glass-hover transition-all duration-200 cursor-default">
@@ -19,10 +20,17 @@ const StatCard = ({ icon: Icon, label, value, color }) => (
 );
 
 const Dashboard = () => {
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   const [stats, setStats] = useState({ users: 0, bookings: 0, messages: 0 });
   const [suggestions, setSuggestions] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
+
+  const syncRecentUserPresence = useCallback((onlineIds) => {
+    setRecentUsers((prev) => prev.map((recentUser) => ({
+      ...recentUser,
+      isOnline: onlineIds.includes(recentUser._id),
+    })));
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -49,6 +57,35 @@ const Dashboard = () => {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    const socket = connectSocket(token);
+    const handleUsersOnline = (onlineIds) => {
+      syncRecentUserPresence(onlineIds);
+    };
+    const handleUserOnline = ({ userId }) => {
+      setRecentUsers((prev) => prev.map((recentUser) => (
+        recentUser._id === userId ? { ...recentUser, isOnline: true } : recentUser
+      )));
+    };
+    const handleUserOffline = ({ userId }) => {
+      setRecentUsers((prev) => prev.map((recentUser) => (
+        recentUser._id === userId ? { ...recentUser, isOnline: false } : recentUser
+      )));
+    };
+
+    socket.on('users:online', handleUsersOnline);
+    socket.on('user:online', handleUserOnline);
+    socket.on('user:offline', handleUserOffline);
+
+    return () => {
+      socket.off('users:online', handleUsersOnline);
+      socket.off('user:online', handleUserOnline);
+      socket.off('user:offline', handleUserOffline);
+    };
+  }, [token, syncRecentUserPresence]);
 
   return (
     <div className="space-y-8 fade-in">
