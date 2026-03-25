@@ -5,8 +5,26 @@ import { getRedis } from '../config/redis.js';
 
 // Track online users in memory (Redis-backed when available)
 const onlineUsers = new Map();
+let socketServer = null;
+
+export const setSocketServer = (io) => {
+  socketServer = io;
+};
+
+export const getSocketServer = () => socketServer;
+
+export const emitToUsers = (io, userIds, event, payload) => {
+  userIds.forEach((userId) => {
+    const target = onlineUsers.get(userId?.toString());
+    if (target?.socketId) {
+      io.to(target.socketId).emit(event, payload);
+    }
+  });
+};
 
 export const setupSocket = (io) => {
+  setSocketServer(io);
+
   // Auth middleware for socket
   io.use(async (socket, next) => {
     try {

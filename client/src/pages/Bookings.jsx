@@ -5,10 +5,11 @@ import useAuthStore from '../store/authStore';
 import api from '../services/api';
 import useVisibilityRefresh from '../hooks/useVisibilityRefresh';
 import { emitBookingChanged, subscribeToBookingChanges } from '../services/liveUpdates';
+import { connectSocket } from '../services/socket';
 import toast from 'react-hot-toast';
 
 const Bookings = () => {
-  const { user: me } = useAuthStore();
+  const { user: me, token } = useAuthStore();
   const [searchParams] = useSearchParams();
   const [bookings, setBookings] = useState([]);
   const [filter, setFilter] = useState('all');
@@ -55,6 +56,21 @@ const Bookings = () => {
       fetchBookings();
     });
   }, [fetchBookings]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    const socket = connectSocket(token);
+    const handleBookingUpdated = ({ booking }) => {
+      emitBookingChanged(booking);
+    };
+
+    socket.on('booking:updated', handleBookingUpdated);
+
+    return () => {
+      socket.off('booking:updated', handleBookingUpdated);
+    };
+  }, [token]);
 
   const handleCreate = async (e) => {
     e.preventDefault();

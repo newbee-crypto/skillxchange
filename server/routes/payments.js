@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { auth } from '../middleware/auth.js';
 import { createPaymentIntent, confirmPayment } from '../services/paymentService.js';
 import Booking from '../models/Booking.js';
+import { emitToUsers, getSocketServer } from '../socket/index.js';
 
 const router = Router();
 
@@ -22,7 +23,18 @@ router.post('/create', auth, async (req, res) => {
     booking.paymentStatus = 'paid';
     await booking.save();
 
-    res.json({ payment, booking });
+    const populated = await booking.populate(['requester', 'provider']);
+    const io = getSocketServer();
+    if (io) {
+      emitToUsers(
+        io,
+        [populated.requester?._id, populated.provider?._id],
+        'booking:updated',
+        { booking: populated }
+      );
+    }
+
+    res.json({ payment, booking: populated });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

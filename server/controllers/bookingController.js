@@ -1,4 +1,5 @@
 import Booking from '../models/Booking.js';
+import { emitToUsers, getSocketServer } from '../socket/index.js';
 
 export const getBookingById = async (req, res) => {
   try {
@@ -39,6 +40,15 @@ export const createBooking = async (req, res) => {
     });
 
     const populated = await booking.populate(['requester', 'provider']);
+    const io = getSocketServer();
+    if (io) {
+      emitToUsers(
+        io,
+        [populated.requester?._id, populated.provider?._id],
+        'booking:updated',
+        { booking: populated }
+      );
+    }
     res.status(201).json({ booking: populated });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -101,6 +111,15 @@ export const updateBookingStatus = async (req, res) => {
     await booking.save();
 
     const populated = await booking.populate(['requester', 'provider']);
+    const io = getSocketServer();
+    if (io) {
+      emitToUsers(
+        io,
+        [populated.requester?._id, populated.provider?._id],
+        'booking:updated',
+        { booking: populated }
+      );
+    }
     res.json({ booking: populated });
   } catch (error) {
     res.status(500).json({ error: error.message });
