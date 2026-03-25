@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Send, Sparkles, Phone, ArrowLeft } from 'lucide-react';
 import useAuthStore from '../store/authStore';
@@ -18,72 +18,138 @@ const Chat = () => {
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const activeRoomRef = useRef(null);
 
   const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
-  const updateUserPresence = (userId, isOnline) => {
+
+  const sortConversations = useCallback((items) => (
+    [...items].sort((a, b) => {
+      if (a.lastMessageAt && b.lastMessageAt) {
+        return new Date(b.lastMessageAt) - new Date(a.lastMessageAt);
+      }
+      if (a.lastMessageAt) return -1;
+      if (b.lastMessageAt) return 1;
+      return (a.name || '').localeCompare(b.name || '');
+    })
+  ), []);
+
+  const buildConversationList = useCallback((conversationData) => {
+    const mapped = (conversationData || []).map((item) => ({
+      ...item.user,
+      roomId: item.roomId || getRoomId(me._id, item.user._id),
+      lastMessage: item.lastMessage || '',
+      lastMessageAt: item.lastMessageAt || null,
+    }));
+
+    return sortConversations(mapped);
+  }, [me._id, sortConversations]);
+
+  const updateConversationPresence = useCallback((userId, isOnline) => {
     setConversations((prev) => prev.map((user) => (
       user._id === userId ? { ...user, isOnline } : user
     )));
     setActiveChat((prev) => (
       prev?._id === userId ? { ...prev, isOnline } : prev
     ));
-  };
+  }, []);
 
-  // Connect socket and load conversations
-  useEffect(() => {
-    const socket = connectSocket(token);
+  const updateConversationPreview = useCallback((message) => {
+    const senderId = message.sender?._id || message.sender;
+    const receiverId = message.receiver?._id || message.receiver;
+    const partnerId = senderId === me._id ? receiverId : senderId;
+    const roomId = message.roomId || getRoomId(me._id, partnerId);
+    const content = message.content || '';
+    const createdAt = message.createdAt || new Date().toISOString();
 
-    api.get('/users?limit=50').then(res => {
-      setConversations(res.data.users || []);
+    setConversations((prev) => {
+      const existing = prev.find((user) => user._id === partnerId);
+      if (!existing) return prev;
+
+      const updated = prev.map((user) => (
+        user._id === partnerId
+          ? { ...user, roomId, lastMessage: content, lastMessageAt: createdAt }
+          : user
+      ));
+
+      return sortConversations(updated);
+    });
+
+    setActiveChat((prev) => (
+      prev?._id === partnerId
+        ? { ...prev, roomId, lastMessage: content, lastMessageAt: createdAt }
+        : prev
+    ));
+  }, [getRoomId, me._id, sortConversations]);
+
+  const loadConversations = useCallback(async () => {
+    try {
+      const { data } = await api.get('/messages/conversations');
+      const nextConversations = buildConversationList(data.conversations || []);
+      setConversations(nextConversations);
+
       if (targetUserId) {
-        const target = res.data.users.find(u => u._id === targetUserId);
+        const target = nextConversations.find((user) => user._id === targetUserId);
         if (target) {
           setActiveChat(target);
-          setShowSidebar(false); // Auto-hide sidebar on mobile when opening from link
+          setShowSidebar(false);
         }
       }
-    });
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
+    }
+  }, [buildConversationList, targetUserId]);
 
-    socket.on('chat:message', (msg) => {
-      setMessages(prev => [...prev, msg]);
-    });
+  useEffect(() => {
+    activeRoomRef.current = activeChat ? getRoomId(me._id, activeChat._id) : null;
+  }, [activeChat, me._id]);
 
-    socket.on('chat:typing', ({ name }) => setTyping(name));
-    socket.on('chat:stop-typing', () => setTyping(null));
-    socket.on('users:online', (ids) => {
+  useEffect(() => {
+    const socket = connectSocket(token);
+    loadConversations();
+
+    const handleIncomingMessage = (msg) => {
+      if (msg.roomId === activeRoomRef.current) {
+        setMessages((prev) => [...prev, msg]);
+      }
+      updateConversationPreview(msg);
+    };
+
+    const handleUsersOnline = (ids) => {
       setConversations((prev) => prev.map((user) => ({
         ...user,
         isOnline: ids.includes(user._id),
       })));
       setActiveChat((prev) => prev ? { ...prev, isOnline: ids.includes(prev._id) } : prev);
-    });
-    socket.on('user:online', ({ userId }) => updateUserPresence(userId, true));
-    socket.on('user:offline', ({ userId }) => updateUserPresence(userId, false));
+    };
 
+    socket.on('chat:message', handleIncomingMessage);
+    socket.on('chat:typing', ({ name }) => setTyping(name));
+    socket.on('chat:stop-typing', () => setTyping(null));
+    socket.on('users:online', handleUsersOnline);
+    socket.on('user:online', ({ userId }) => updateConversationPresence(userId, true));
+    socket.on('user:offline', ({ userId }) => updateConversationPresence(userId, false));
     socket.on('chat:notification', ({ from, message: content }) => {
       toast(`${from}: ${content}`, { icon: '💬' });
     });
 
     return () => {
-      socket.off('chat:message');
+      socket.off('chat:message', handleIncomingMessage);
       socket.off('chat:typing');
       socket.off('chat:stop-typing');
-      socket.off('users:online');
+      socket.off('users:online', handleUsersOnline);
       socket.off('user:online');
       socket.off('user:offline');
       socket.off('chat:notification');
     };
-  }, [token, targetUserId]);
+  }, [loadConversations, token, updateConversationPresence, updateConversationPreview]);
 
-  // Join room when active chat changes
   useEffect(() => {
-    if (!activeChat) return;
+    if (!activeChat) return undefined;
+
     const socket = getSocket();
     const roomId = getRoomId(me._id, activeChat._id);
-
     socket.emit('chat:join', roomId);
 
-    // Load message history from MongoDB
     const loadHistory = async () => {
       try {
         const { data } = await api.get(`/messages/${roomId}`);
@@ -93,6 +159,7 @@ const Chat = () => {
         setMessages([]);
       }
     };
+
     loadHistory();
 
     return () => {
@@ -100,14 +167,13 @@ const Chat = () => {
     };
   }, [activeChat, me._id]);
 
-  // Scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const handleSelectUser = (user) => {
     setActiveChat(user);
-    setShowSidebar(false); // Hide sidebar on mobile after selecting
+    setShowSidebar(false);
   };
 
   const handleBackToList = () => {
@@ -117,13 +183,23 @@ const Chat = () => {
 
   const sendMessage = () => {
     if (!input.trim() || !activeChat) return;
+
     const socket = getSocket();
     const roomId = getRoomId(me._id, activeChat._id);
+    const content = input.trim();
 
     socket.emit('chat:message', {
       roomId,
       receiverId: activeChat._id,
-      content: input.trim(),
+      content,
+    });
+
+    updateConversationPreview({
+      sender: me._id,
+      receiver: activeChat._id,
+      roomId,
+      content,
+      createdAt: new Date().toISOString(),
     });
 
     socket.emit('chat:stop-typing', { roomId });
@@ -133,6 +209,7 @@ const Chat = () => {
   const handleTyping = () => {
     const socket = getSocket();
     if (!activeChat) return;
+
     const roomId = getRoomId(me._id, activeChat._id);
     socket.emit('chat:typing', { roomId });
 
@@ -144,12 +221,13 @@ const Chat = () => {
 
   const handleSummarize = async () => {
     if (!activeChat) return;
+
     setSummarizing(true);
     try {
       const roomId = getRoomId(me._id, activeChat._id);
       const { data } = await api.post('/ai/summarize', { roomId });
       toast.success('Summary generated!');
-      setMessages(prev => [...prev, {
+      setMessages((prev) => [...prev, {
         _id: `summary-${Date.now()}`,
         sender: { _id: 'ai', name: 'AI Assistant' },
         content: `📋 **Summary**: ${data.summary}`,
@@ -164,7 +242,6 @@ const Chat = () => {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-0 sm:gap-4 fade-in">
-      {/* Sidebar — full screen on mobile, fixed width on desktop */}
       <div className={`${showSidebar ? 'flex' : 'hidden'} sm:flex w-full sm:w-72 glass rounded-2xl flex-col shrink-0 overflow-hidden`}>
         <div className="p-4 border-b border-dark-400">
           <h2 className="text-lg font-semibold text-white">Messages</h2>
@@ -187,21 +264,27 @@ const Chat = () => {
                 {u.isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-dark-600 pulse-dot" />}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white font-medium truncate">{u.name}</p>
-                <p className="text-xs text-dark-200 truncate">{u.skills?.[0]?.name || 'Member'}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-white font-medium truncate">{u.name}</p>
+                  {u.lastMessageAt && (
+                    <span className="text-[10px] text-dark-300 whitespace-nowrap">
+                      {new Date(u.lastMessageAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-dark-200 truncate">
+                  {u.lastMessage || u.skills?.[0]?.name || 'Start a conversation'}
+                </p>
               </div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Chat Area — full screen on mobile, flex on desktop */}
       {activeChat ? (
         <div className={`${!showSidebar ? 'flex' : 'hidden'} sm:flex flex-1 glass rounded-2xl flex-col overflow-hidden`}>
-          {/* Header */}
           <div className="flex items-center justify-between p-3 sm:p-4 border-b border-dark-400">
             <div className="flex items-center gap-3">
-              {/* Back button — mobile only */}
               <button onClick={handleBackToList} className="sm:hidden p-2 rounded-lg text-dark-100 hover:bg-dark-500 transition-colors -ml-1">
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -227,7 +310,6 @@ const Chat = () => {
             </div>
           </div>
 
-          {/* Messages */}
           <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
             {messages.length === 0 && (
               <div className="text-center py-12 sm:py-20">
@@ -264,14 +346,16 @@ const Chat = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input */}
           <div className="p-3 sm:p-4 border-t border-dark-400">
             <div className="flex gap-2 sm:gap-3">
               <input
                 id="chat-input"
                 type="text"
                 value={input}
-                onChange={(e) => { setInput(e.target.value); handleTyping(); }}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  handleTyping();
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
                 placeholder="Type a message..."
                 className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-700 border border-dark-400 rounded-xl text-white placeholder-dark-200 focus:outline-none focus:border-primary-500 transition-colors text-sm sm:text-base"
