@@ -20,11 +20,22 @@ const Chat = () => {
   const [summarizing, setSummarizing] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const typingTimeoutRef = useRef(null);
   const activeRoomRef = useRef(null);
+  const shouldStickToBottomRef = useRef(true);
+  const preserveScrollRef = useRef(null);
 
   const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
   const loadHistoryPage = useCallback(async (roomId, page, mode = 'replace') => {
+    const container = messagesContainerRef.current;
+    if (mode === 'append-older' && container) {
+      preserveScrollRef.current = {
+        previousHeight: container.scrollHeight,
+        previousTop: container.scrollTop,
+      };
+    }
+
     const { data } = await api.get(`/messages/${roomId}?page=${page}&limit=30`);
     const nextMessages = data.messages || [];
 
@@ -202,8 +213,28 @@ const Chat = () => {
   }, [activeChat, loadHistoryPage, me._id]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    if (preserveScrollRef.current) {
+      const { previousHeight, previousTop } = preserveScrollRef.current;
+      container.scrollTop = container.scrollHeight - previousHeight + previousTop;
+      preserveScrollRef.current = null;
+      return;
+    }
+
+    if (shouldStickToBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
+
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 80;
+  };
 
   const handleSelectUser = (user) => {
     setActiveChat(user);
@@ -371,7 +402,7 @@ const Chat = () => {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+          <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
             {historyPage < historyPages && (
               <div className="flex justify-center">
                 <button
