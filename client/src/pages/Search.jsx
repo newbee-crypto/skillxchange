@@ -1,45 +1,21 @@
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Search as SearchIcon, Filter, MapPin, Star, MessageCircle } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { Search as SearchIcon, Filter, MapPin, Star, MessageCircle, LoaderCircle, X } from 'lucide-react';
+import useAuthStore from '../store/authStore';
 import api from '../services/api';
+import { connectSocket } from '../services/socket';
 
 const Search = () => {
-  const [query, setQuery] = useState('');
-  const [skill, setSkill] = useState('');
-  const [level, setLevel] = useState('');
+  const { token } = useAuthStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get('q') || '');
+  const [skill, setSkill] = useState(searchParams.get('skill') || '');
+  const [level, setLevel] = useState(searchParams.get('level') || '');
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
-  const [showFilters, setShowFilters] = useState(false);
-
-  const fetchUsers = async (page = 1) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      if (query) params.set('q', query);
-      if (skill) params.set('skill', skill);
-      if (level) params.set('level', level);
-      params.set('page', page);
-      params.set('limit', 12);
-
-      const endpoint = query || skill || level ? '/users/search' : '/users';
-      const { data } = await api.get(`${endpoint}?${params}`);
-      setUsers(data.users || []);
-      setPagination(data.pagination || { page: 1, pages: 1, total: 0 });
-    } catch (err) {
-      console.error(err);
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    fetchUsers(1);
-  };
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [pagination, setPagination] = useState({ page: Number(searchParams.get('page') || 1), pages: 1, total: 0 });
+  const [showFilters, setShowFilters] = useState(Boolean(searchParams.get('skill') || searchParams.get('level')));
 
   const levelColors = {
     beginner: 'bg-green-500/20 text-green-300',
@@ -48,6 +24,122 @@ const Search = () => {
     expert: 'bg-amber-500/20 text-amber-300',
   };
 
+  const buildParams = useCallback((page = 1) => {
+    const params = new URLSearchParams();
+    const trimmedQuery = query.trim();
+    const trimmedSkill = skill.trim();
+
+    if (trimmedQuery) params.set('q', trimmedQuery);
+    if (trimmedSkill) params.set('skill', trimmedSkill);
+    if (level) params.set('level', level);
+    if (page > 1) params.set('page', String(page));
+
+    return params;
+  }, [level, query, skill]);
+
+  const updateUserPresence = useCallback((userId, isOnline) => {
+    setUsers((prev) => prev.map((user) => (
+      user._id === userId ? { ...user, isOnline } : user
+    )));
+  }, []);
+
+  const fetchUsers = useCallback(async (page = 1) => {
+    setLoading(true);
+
+    try {
+      const params = buildParams(page);
+      const requestParams = new URLSearchParams(params);
+      requestParams.set('limit', '12');
+
+      const endpoint = params.get('q') || params.get('skill') || params.get('level')
+        ? '/users/search'
+        : '/users';
+
+      const { data } = await api.get(`${endpoint}?${requestParams.toString()}`);
+      setUsers(data.users || []);
+      setPagination(data.pagination || { page: 1, pages: 1, total: 0 });
+      setHasLoaded(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [buildParams]);
+
+  useEffect(() => {
+    const page = Number(searchParams.get('page') || 1);
+    const params = buildParams(page);
+    const nextParams = new URLSearchParams(params);
+
+    if (page > 1) {
+      nextParams.set('page', String(page));
+    }
+
+    const currentString = searchParams.toString();
+    const nextString = nextParams.toString();
+    if (currentString !== nextString) {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [buildParams, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const page = Number(searchParams.get('page') || 1);
+    const timeoutId = window.setTimeout(() => {
+      fetchUsers(page);
+    }, hasLoaded ? 300 : 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [fetchUsers, hasLoaded, searchParams]);
+
+  useEffect(() => {
+    if (!token) return undefined;
+
+    const socket = connectSocket(token);
+    const handleUsersOnline = (onlineIds) => {
+      setUsers((prev) => prev.map((user) => ({
+        ...user,
+        isOnline: onlineIds.includes(user._id),
+      })));
+    };
+    const handleUserOnline = ({ userId }) => updateUserPresence(userId, true);
+    const handleUserOffline = ({ userId }) => updateUserPresence(userId, false);
+
+    socket.on('users:online', handleUsersOnline);
+    socket.on('user:online', handleUserOnline);
+    socket.on('user:offline', handleUserOffline);
+
+    return () => {
+      socket.off('users:online', handleUsersOnline);
+      socket.off('user:online', handleUserOnline);
+      socket.off('user:offline', handleUserOffline);
+    };
+  }, [token, updateUserPresence]);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchUsers(1);
+  };
+
+  const clearFilters = () => {
+    setQuery('');
+    setSkill('');
+    setLevel('');
+    setShowFilters(false);
+    setSearchParams({}, { replace: true });
+  };
+
+  const handlePageChange = (page) => {
+    const params = buildParams(page);
+    if (page > 1) {
+      params.set('page', String(page));
+    }
+    setSearchParams(params, { replace: false });
+  };
+
+  const hasActiveFilters = Boolean(query.trim() || skill.trim() || level);
+
   return (
     <div className="space-y-6 fade-in">
       <div>
@@ -55,59 +147,93 @@ const Search = () => {
         <p className="text-dark-100">Find experts and learners across the community</p>
       </div>
 
-      {/* Search Bar */}
-      <form onSubmit={handleSearch} className="flex gap-3">
-        <div className="flex-1 relative">
-          <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
-          <input
-            id="search-input"
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, skill, or keyword..."
-            className="w-full pl-12 pr-4 py-3 bg-dark-600 border border-dark-400 rounded-xl text-white placeholder-dark-200 focus:outline-none focus:border-primary-500 transition-colors"
-          />
+      <form onSubmit={handleSearch} className="space-y-4">
+        <div className="flex gap-3">
+          <div className="flex-1 relative">
+            <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dark-200" />
+            <input
+              id="search-input"
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search by name, skill, or keyword..."
+              className="w-full pl-12 pr-10 py-3 bg-dark-600 border border-dark-400 rounded-xl text-white placeholder-dark-200 focus:outline-none focus:border-primary-500 transition-colors"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full text-dark-200 hover:text-white hover:bg-dark-500 transition-colors"
+                aria-label="Clear search"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFilters((prev) => !prev)}
+            className={`px-4 py-3 rounded-xl border transition-colors flex items-center gap-2 ${showFilters ? 'bg-primary-600/20 border-primary-500 text-primary-400' : 'bg-dark-600 border-dark-400 text-dark-100 hover:border-dark-300'}`}
+          >
+            <Filter className="w-4 h-4" />
+            <span className="hidden sm:inline">Filters</span>
+          </button>
+          <button id="search-submit" type="submit" className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-500 transition-colors font-medium">
+            Search
+          </button>
         </div>
-        <button type="button" onClick={() => setShowFilters(!showFilters)} className={`px-4 py-3 rounded-xl border transition-colors flex items-center gap-2 ${showFilters ? 'bg-primary-600/20 border-primary-500 text-primary-400' : 'bg-dark-600 border-dark-400 text-dark-100 hover:border-dark-300'}`}>
-          <Filter className="w-4 h-4" />
-          <span className="hidden sm:inline">Filters</span>
-        </button>
-        <button id="search-submit" type="submit" className="px-6 py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-500 transition-colors font-medium">
-          Search
-        </button>
+
+        {showFilters && (
+          <div className="glass rounded-xl p-4 flex gap-4 flex-wrap items-end slide-in-right">
+            <div>
+              <label className="block text-xs text-dark-100 mb-1">Skill</label>
+              <input
+                value={skill}
+                onChange={(e) => setSkill(e.target.value)}
+                placeholder="e.g. React"
+                className="px-3 py-2 bg-dark-700 border border-dark-400 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-dark-100 mb-1">Level</label>
+              <select
+                value={level}
+                onChange={(e) => setLevel(e.target.value)}
+                className="px-3 py-2 bg-dark-700 border border-dark-400 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
+              >
+                <option value="">All levels</option>
+                <option value="beginner">Beginner</option>
+                <option value="intermediate">Intermediate</option>
+                <option value="advanced">Advanced</option>
+                <option value="expert">Expert</option>
+              </select>
+            </div>
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="px-3 py-2 rounded-lg bg-dark-500 text-dark-50 hover:bg-dark-400 transition-colors text-sm"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
       </form>
 
-      {/* Filters */}
-      {showFilters && (
-        <div className="glass rounded-xl p-4 flex gap-4 flex-wrap slide-in-right">
-          <div>
-            <label className="block text-xs text-dark-100 mb-1">Skill</label>
-            <input
-              value={skill}
-              onChange={e => setSkill(e.target.value)}
-              placeholder="e.g. React"
-              className="px-3 py-2 bg-dark-700 border border-dark-400 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
-            />
+      <div className="flex items-center justify-between min-h-6">
+        <p className="text-dark-100 text-sm">
+          {pagination.total} users found
+        </p>
+        {loading && hasLoaded && (
+          <div className="flex items-center gap-2 text-primary-400 text-sm">
+            <LoaderCircle className="w-4 h-4 animate-spin" />
+            Updating results...
           </div>
-          <div>
-            <label className="block text-xs text-dark-100 mb-1">Level</label>
-            <select
-              value={level}
-              onChange={e => setLevel(e.target.value)}
-              className="px-3 py-2 bg-dark-700 border border-dark-400 rounded-lg text-white text-sm focus:outline-none focus:border-primary-500"
-            >
-              <option value="">All levels</option>
-              <option value="beginner">Beginner</option>
-              <option value="intermediate">Intermediate</option>
-              <option value="advanced">Advanced</option>
-              <option value="expert">Expert</option>
-            </select>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Results */}
-      {loading ? (
+      {!hasLoaded && loading ? (
         <div className="text-center py-20">
           <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto" />
         </div>
@@ -118,8 +244,7 @@ const Search = () => {
         </div>
       ) : (
         <>
-          <p className="text-dark-100 text-sm">{pagination.total} users found</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 transition-opacity ${loading ? 'opacity-80' : 'opacity-100'}`}>
             {users.map((u) => (
               <div key={u._id} className="glass rounded-xl p-5 glass-hover transition-all duration-200 hover:translate-y-[-2px]">
                 <div className="flex items-start gap-3 mb-3">
@@ -171,12 +296,15 @@ const Search = () => {
             ))}
           </div>
 
-          {/* Pagination */}
           {pagination.pages > 1 && (
             <div className="flex justify-center gap-2 mt-6">
-              {Array.from({ length: pagination.pages }, (_, i) => i + 1).map(p => (
-                <button key={p} onClick={() => fetchUsers(p)} className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${p === pagination.page ? 'bg-primary-600 text-white' : 'bg-dark-600 text-dark-100 hover:bg-dark-500'}`}>
-                  {p}
+              {Array.from({ length: pagination.pages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  onClick={() => handlePageChange(page)}
+                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${page === pagination.page ? 'bg-primary-600 text-white' : 'bg-dark-600 text-dark-100 hover:bg-dark-500'}`}
+                >
+                  {page}
                 </button>
               ))}
             </div>
