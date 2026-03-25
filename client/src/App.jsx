@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import toast from 'react-hot-toast';
 import useAuthStore from './store/authStore';
 import Navbar from './components/Navbar';
+import { AUTH_UNAUTHORIZED_EVENT } from './services/api';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
@@ -31,7 +33,30 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
-const App = () => {
+const SessionWatcher = () => {
+  const logout = useAuthStore((state) => state.logout);
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout();
+      if (location.pathname !== '/login') {
+        toast.error('Session expired. Please sign in again.');
+        navigate('/login', { replace: true });
+      }
+    };
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => {
+      window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    };
+  }, [location.pathname, logout, navigate]);
+
+  return null;
+};
+
+const AppRoutes = () => {
   const fetchMe = useAuthStore((state) => state.fetchMe);
 
   useEffect(() => {
@@ -39,17 +64,8 @@ const App = () => {
   }, [fetchMe]);
 
   return (
-    <BrowserRouter>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          style: {
-            background: '#25262b',
-            color: '#c1c2c5',
-            border: '1px solid rgba(255,255,255,0.06)',
-          },
-        }}
-      />
+    <>
+      <SessionWatcher />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
@@ -75,8 +91,24 @@ const App = () => {
           </ProtectedRoute>
         } />
       </Routes>
-    </BrowserRouter>
+    </>
   );
 };
+
+const App = () => (
+  <BrowserRouter>
+    <Toaster
+      position="top-right"
+      toastOptions={{
+        style: {
+          background: '#25262b',
+          color: '#c1c2c5',
+          border: '1px solid rgba(255,255,255,0.06)',
+        },
+      }}
+    />
+    <AppRoutes />
+  </BrowserRouter>
+);
 
 export default App;

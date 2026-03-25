@@ -1,6 +1,8 @@
 import axios from 'axios';
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
+let unauthorizedDispatched = false;
 
 const api = axios.create({
   baseURL: `${backendUrl}/api`,
@@ -23,7 +25,13 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      window.location.href = '/login';
+      if (!unauthorizedDispatched) {
+        unauthorizedDispatched = true;
+        window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+        window.setTimeout(() => {
+          unauthorizedDispatched = false;
+        }, 1000);
+      }
     }
     return Promise.reject(error);
   }
