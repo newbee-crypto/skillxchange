@@ -12,6 +12,9 @@ const Chat = () => {
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPages, setHistoryPages] = useState(1);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [input, setInput] = useState('');
   const [typing, setTyping] = useState(null);
   const [summarizing, setSummarizing] = useState(false);
@@ -21,6 +24,17 @@ const Chat = () => {
   const activeRoomRef = useRef(null);
 
   const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
+  const loadHistoryPage = useCallback(async (roomId, page, mode = 'replace') => {
+    const { data } = await api.get(`/messages/${roomId}?page=${page}&limit=30`);
+    const nextMessages = data.messages || [];
+
+    setMessages((prev) => (
+      mode === 'append-older' ? [...nextMessages, ...prev] : nextMessages
+    ));
+    setHistoryPage(data.pagination?.page || page);
+    setHistoryPages(data.pagination?.pages || 1);
+  }, []);
+
   const mergeIncomingMessage = useCallback((incomingMessage) => {
     setMessages((prev) => {
       const existingIndex = prev.findIndex((message) => (
@@ -171,11 +185,12 @@ const Chat = () => {
 
     const loadHistory = async () => {
       try {
-        const { data } = await api.get(`/messages/${roomId}`);
-        setMessages(data.messages || []);
+        await loadHistoryPage(roomId, 1);
       } catch (err) {
         console.error('Failed to load messages:', err);
         setMessages([]);
+        setHistoryPage(1);
+        setHistoryPages(1);
       }
     };
 
@@ -184,7 +199,7 @@ const Chat = () => {
     return () => {
       socket.emit('chat:leave', roomId);
     };
-  }, [activeChat, me._id]);
+  }, [activeChat, loadHistoryPage, me._id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -272,6 +287,20 @@ const Chat = () => {
     setSummarizing(false);
   };
 
+  const handleLoadOlder = async () => {
+    if (!activeChat || loadingOlder || historyPage >= historyPages) return;
+
+    setLoadingOlder(true);
+    try {
+      const roomId = getRoomId(me._id, activeChat._id);
+      await loadHistoryPage(roomId, historyPage + 1, 'append-older');
+    } catch (err) {
+      toast.error('Failed to load older messages');
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-0 sm:gap-4 fade-in">
       <div className={`${showSidebar ? 'flex' : 'hidden'} sm:flex w-full sm:w-72 glass rounded-2xl flex-col shrink-0 overflow-hidden`}>
@@ -343,6 +372,17 @@ const Chat = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+            {historyPage < historyPages && (
+              <div className="flex justify-center">
+                <button
+                  onClick={handleLoadOlder}
+                  disabled={loadingOlder}
+                  className="px-3 py-1.5 rounded-lg bg-dark-500 text-dark-50 text-xs hover:bg-dark-400 transition-colors disabled:opacity-60"
+                >
+                  {loadingOlder ? 'Loading...' : 'Load older messages'}
+                </button>
+              </div>
+            )}
             {messages.length === 0 && (
               <div className="text-center py-12 sm:py-20">
                 <p className="text-dark-200">No messages yet</p>
