@@ -26,12 +26,14 @@ const VideoCall = () => {
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [allUsers, setAllUsers] = useState([]);
   const [incomingCall, setIncomingCall] = useState(null);
+  const [callStatusText, setCallStatusText] = useState('Ready');
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const timerRef = useRef(null);
+  const callTimeoutRef = useRef(null);
   const callingUserRef = useRef(null);
 
   // Load users list when in standalone mode
@@ -55,7 +57,18 @@ const VideoCall = () => {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
     clearInterval(timerRef.current);
+    clearTimeout(callTimeoutRef.current);
   }, []);
+
+  const resetCallState = useCallback((statusText = 'Ready') => {
+    cleanup();
+    setCallState('idle');
+    setDuration(0);
+    setRemoteUser(null);
+    setIncomingCall(null);
+    setCallStatusText(statusText);
+    callingUserRef.current = null;
+  }, [cleanup]);
 
   const createPeerConnection = useCallback((targetUserId) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
@@ -80,11 +93,12 @@ const VideoCall = () => {
       if (pc.connectionState === 'connected') {
         setCallState('connected');
         setIncomingCall(null);
+        setCallStatusText(`In call with ${remoteUser?.name || 'participant'}`);
         timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       }
       if (['disconnected', 'failed'].includes(pc.connectionState)) {
         toast.error('Connection lost');
-        endCall();
+        resetCallState('Connection lost');
       }
     };
 
@@ -96,7 +110,7 @@ const VideoCall = () => {
 
     peerConnectionRef.current = pc;
     return pc;
-  }, []);
+  }, [remoteUser?.name, resetCallState]);
 
   const startCall = async (targetUserId, targetUserName) => {
     try {
@@ -119,6 +133,12 @@ const VideoCall = () => {
       });
 
       setCallState('calling');
+      setCallStatusText(`Calling ${targetUserName}...`);
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = setTimeout(() => {
+        toast.error(`${targetUserName} did not answer`);
+        resetCallState('Call timed out');
+      }, 30000);
       toast(`Calling ${targetUserName}...`, { icon: '📞' });
     } catch (err) {
       toast.error('Camera/microphone access denied');
@@ -148,6 +168,7 @@ const VideoCall = () => {
       socket.emit('webrtc:answer', { to: incomingCall.from, answer });
 
       setCallState('calling');
+      setCallStatusText(`Connecting to ${remoteUser?.name || 'caller'}...`);
       setIncomingCall(null);
     } catch (err) {
       toast.error('Failed to accept call');
@@ -180,12 +201,8 @@ const VideoCall = () => {
     if (callingUserRef.current) {
       socket?.emit('webrtc:end-call', { to: callingUserRef.current });
     }
-    cleanup();
-    setCallState('idle');
-    setDuration(0);
-    setRemoteUser(null);
-    callingUserRef.current = null;
-  }, [cleanup]);
+    resetCallState('Call ended');
+  }, [resetCallState]);
 
   const toggleMute = () => {
     if (localStreamRef.current) {
@@ -215,11 +232,7 @@ const VideoCall = () => {
     socket.on('webrtc:ice-candidate', handleIceCandidate);
     socket.on('webrtc:end-call', () => {
       toast('Call ended');
-      cleanup();
-      setCallState('idle');
-      setDuration(0);
-      setRemoteUser(null);
-      callingUserRef.current = null;
+      resetCallState('Call ended');
     });
 
     socket.on('users:online', (ids) => setOnlineUsers(ids));
@@ -236,7 +249,7 @@ const VideoCall = () => {
       socket.off('user:offline');
       cleanup();
     };
-  }, [token, cleanup, handleOffer]);
+  }, [token, cleanup, handleOffer, resetCallState]);
 
   const formatDuration = (s) => {
     const m = Math.floor(s / 60);
@@ -389,7 +402,7 @@ const VideoCall = () => {
       </div>
 
       <p className="text-dark-200 text-sm mt-4">
-        {callState === 'calling' ? 'Ringing...' : callState === 'connected' ? `In call with ${remoteUser?.name}` : 'Ready'}
+        {callState === 'connected' ? `In call with ${remoteUser?.name}` : callStatusText}
       </p>
     </div>
   );
