@@ -37,12 +37,25 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Rate limiting
-const limiter = rateLimit({
+const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many auth attempts, please try again later' },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 500,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.path === '/health',
   message: { error: 'Too many requests, please try again later' },
 });
-app.use('/api/', limiter);
+
+app.use('/api/auth', authLimiter);
+app.use('/api/', apiLimiter);
 
 // Routes
 app.use('/api/auth', authRoutes);
