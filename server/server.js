@@ -21,6 +21,35 @@ const httpServer = createServer(app);
 
 app.set('trust proxy', 1);
 
+const getClientKey = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+    return forwardedFor.split(',')[0].trim();
+  }
+
+  return req.ip;
+};
+
+const createLimiter = ({ max, message, skipSuccessfulRequests = false, skip }) => rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests,
+  skip,
+  keyGenerator: getClientKey,
+  handler: (req, res) => {
+    console.warn('[rate-limit]', {
+      key: getClientKey(req),
+      method: req.method,
+      path: req.originalUrl,
+      userAgent: req.get('user-agent'),
+    });
+
+    res.status(429).json({ error: message });
+  },
+});
+
 // Socket.io
 const io = new Server(httpServer, {
   cors: {
@@ -39,22 +68,16 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static('uploads'));
 
 // Rate limiting
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  standardHeaders: true,
-  legacyHeaders: false,
+const authLimiter = createLimiter({
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 100),
   skipSuccessfulRequests: true,
-  message: { error: 'Too many auth attempts, please try again later' },
+  message: 'Too many auth attempts, please try again later',
 });
 
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 500,
-  standardHeaders: true,
-  legacyHeaders: false,
+const apiLimiter = createLimiter({
+  max: Number(process.env.API_RATE_LIMIT_MAX || 500),
   skip: (req) => req.path === '/health',
-  message: { error: 'Too many requests, please try again later' },
+  message: 'Too many requests, please try again later',
 });
 
 app.use('/api/auth', authLimiter);
