@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Send, Sparkles, Phone, ArrowLeft } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { connectSocket, getSocket } from '../services/socket';
-import api from '../services/api';
+import api, { resolveAssetUrl } from '../services/api';
 import toast from 'react-hot-toast';
 
 const Chat = () => {
@@ -347,7 +347,7 @@ const Chat = () => {
             >
               <div className="relative flex-shrink-0">
                 {u.avatar ? (
-                  <img src={u.avatar} alt={u.name} className="w-10 h-10 rounded-full object-cover" />
+                  <img src={resolveAssetUrl(u.avatar)} alt={u.name} className="w-10 h-10 rounded-full object-cover" />
                 ) : (
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-semibold">
                     {u.name?.[0]?.toUpperCase()}
@@ -381,7 +381,7 @@ const Chat = () => {
                 <ArrowLeft className="w-5 h-5" />
               </button>
               {activeChat.avatar ? (
-                <img src={activeChat.avatar} alt={activeChat.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover" />
+                <img src={resolveAssetUrl(activeChat.avatar)} alt={activeChat.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover" />
               ) : (
                 <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-semibold text-sm sm:text-base">
                   {activeChat.name?.[0]?.toUpperCase()}

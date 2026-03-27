@@ -13,9 +13,15 @@ export const getProfile = async (req, res) => {
 export const updateProfile = async (req, res) => {
   try {
     const { name, bio, avatar, location } = req.body;
+    const updates = { name, bio, location };
+
+    if (avatar) {
+      updates.avatar = avatar;
+    }
+
     const user = await User.findByIdAndUpdate(
       req.user._id,
-      { name, bio, avatar, location },
+      updates,
       { new: true, runValidators: true }
     );
     res.json({ user });

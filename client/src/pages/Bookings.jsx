@@ -241,7 +241,7 @@ const Bookings = () => {
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <Link to={`/profile/${otherUser?._id}`} className="text-white font-semibold hover:text-primary-400 transition-colors">
+                        <Link to={`/profile/${otherUser?._id}`} className="truncate text-white font-semibold hover:text-primary-400 transition-colors">
                           {otherUser?.name}
                         </Link>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusStyles[b.status]}`}>{b.status}</span>
@@ -253,11 +253,11 @@ const Bookings = () => {
                         <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> {b.duration}min</span>
                         {b.price > 0 && <span className="text-emerald-400">${b.price}</span>}
                       </div>
-                      {b.notes && <p className="text-dark-200 text-sm mt-2">{b.notes}</p>}
+                      {b.notes && <p className="mt-2 break-words text-dark-200 text-sm">{b.notes}</p>}
                     </div>
                   </div>
 
-                  <div className="flex w-full flex-wrap justify-end gap-2 lg:ml-4 lg:w-auto lg:flex-nowrap">
+                  <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 lg:ml-4 lg:w-auto lg:flex-nowrap">
                     {b.status === 'pending' && isProvider && (
                       <>
                         <button onClick={() => handleStatus(b._id, 'accepted')} className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors" title="Accept">

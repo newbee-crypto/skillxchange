@@ -6,8 +6,28 @@ let unauthorizedDispatched = false;
 
 export const resolveAssetUrl = (url = '') => {
   if (!url) return '';
-  if (/^https?:\/\//i.test(url)) return url;
-  return backendUrl ? `${backendUrl}${url}` : url;
+
+  const normalizedBackendUrl = backendUrl.replace(/\/$/, '');
+
+  if (/^https?:\/\//i.test(url)) {
+    try {
+      const assetUrl = new URL(url);
+
+      if (typeof window !== 'undefined' && window.location.protocol === 'https:' && assetUrl.protocol === 'http:') {
+        assetUrl.protocol = 'https:';
+      }
+
+      return assetUrl.toString();
+    } catch {
+      return url;
+    }
+  }
+
+  if (url.startsWith('/')) {
+    return normalizedBackendUrl ? `${normalizedBackendUrl}${url}` : url;
+  }
+
+  return normalizedBackendUrl ? `${normalizedBackendUrl}/${url}` : url;
 };
 
 const api = axios.create({
