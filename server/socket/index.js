@@ -77,6 +77,10 @@ export const setupSocket = (io) => {
     }
     socket.emit('users:online', Array.from(onlineUsers.keys()));
 
+    socket.on('presence:sync', () => {
+      socket.emit('users:online', Array.from(onlineUsers.keys()));
+    });
+
     // --- CHAT ---
     socket.on('chat:join', (roomId) => {
       socket.join(roomId);

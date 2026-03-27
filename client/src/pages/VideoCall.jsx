@@ -359,6 +359,8 @@ const VideoCall = () => {
   useEffect(() => {
     const socket = connectSocket(token);
 
+    socket.emit('presence:sync');
+
     socket.on('webrtc:offer', handleOffer);
     socket.on('webrtc:answer', handleAnswer);
     socket.on('webrtc:ice-candidate', handleIceCandidate);
