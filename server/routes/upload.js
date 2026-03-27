@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -8,6 +9,7 @@ import User from '../models/User.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsDir = path.resolve(__dirname, '../uploads/avatars');
+fs.mkdirSync(uploadsDir, { recursive: true });
 
 // Configure multer storage
 const storage = multer.diskStorage({

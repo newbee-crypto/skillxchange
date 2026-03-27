@@ -22,6 +22,8 @@ const app = express();
 const httpServer = createServer(app);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const uploadsRoot = path.resolve(__dirname, 'uploads');
+const legacyUploadsRoot = path.resolve(process.cwd(), 'uploads');
 
 app.set('trust proxy', 1);
 
@@ -72,7 +74,8 @@ app.use(cors({
   credentials: true,
 }));
 app.use(express.json({ limit: '10mb' }));
-app.use('/uploads', express.static(path.resolve(__dirname, 'uploads')));
+app.use('/uploads', express.static(uploadsRoot));
+app.use('/uploads', express.static(legacyUploadsRoot));
 
 // Rate limiting
 const authLimiter = createLimiter({
