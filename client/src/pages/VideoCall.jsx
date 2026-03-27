@@ -85,6 +85,23 @@ const VideoCall = () => {
     fetchBooking();
   }, [bookingId, navigate]);
 
+  useEffect(() => {
+    if (!bookingId) return;
+
+    const storedCall = sessionStorage.getItem('incomingCall');
+    if (!storedCall) return;
+
+    try {
+      const parsedCall = JSON.parse(storedCall);
+      if (parsedCall?.roomId === bookingId) {
+        setIncomingCall(parsedCall);
+        setRemoteUser({ name: parsedCall.callerName, _id: parsedCall.from });
+      }
+    } catch (error) {
+      sessionStorage.removeItem('incomingCall');
+    }
+  }, [bookingId]);
+
   const cleanup = useCallback(() => {
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(t => t.stop());
@@ -191,6 +208,7 @@ const VideoCall = () => {
   };
 
   const handleOffer = useCallback(async (data) => {
+    sessionStorage.setItem('incomingCall', JSON.stringify(data));
     setIncomingCall(data);
     setRemoteUser({ name: data.callerName, _id: data.from });
   }, []);
@@ -219,6 +237,7 @@ const VideoCall = () => {
 
       setCallState('calling');
       setCallStatusText(`Connecting to ${remoteUser?.name || 'caller'}...`);
+      sessionStorage.removeItem('incomingCall');
       setIncomingCall(null);
     } catch (err) {
       toast.error('Failed to accept call');
@@ -230,6 +249,7 @@ const VideoCall = () => {
     if (incomingCall) {
       socket.emit('webrtc:end-call', { to: incomingCall.from });
     }
+    sessionStorage.removeItem('incomingCall');
     setIncomingCall(null);
     setRemoteUser(null);
   };
@@ -265,8 +285,12 @@ const VideoCall = () => {
     if (callingUserRef.current) {
       socket?.emit('webrtc:end-call', { to: callingUserRef.current });
     }
+    sessionStorage.removeItem('incomingCall');
     resetCallState('Call ended');
-  }, [resetCallState]);
+    if (bookingId) {
+      navigate('/bookings');
+    }
+  }, [bookingId, navigate, resetCallState]);
 
   const toggleMute = () => {
     if (localStreamRef.current) {

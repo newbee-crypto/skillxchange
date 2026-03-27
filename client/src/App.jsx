@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import useAuthStore from './store/authStore';
 import Navbar from './components/Navbar';
 import { AUTH_UNAUTHORIZED_EVENT } from './services/api';
+import { connectSocket } from './services/socket';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
@@ -56,6 +57,34 @@ const SessionWatcher = () => {
   return null;
 };
 
+const CallWatcher = () => {
+  const { token, user } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!token || !user) return undefined;
+
+    const socket = connectSocket(token);
+    const handleOffer = (payload) => {
+      sessionStorage.setItem('incomingCall', JSON.stringify(payload));
+      toast(`Incoming call from ${payload.callerName}`, { icon: '📞' });
+
+      if (payload.roomId && location.pathname !== `/video/${payload.roomId}`) {
+        navigate(`/video/${payload.roomId}`);
+      }
+    };
+
+    socket.on('webrtc:offer', handleOffer);
+
+    return () => {
+      socket.off('webrtc:offer', handleOffer);
+    };
+  }, [location.pathname, navigate, token, user]);
+
+  return null;
+};
+
 const AppRoutes = () => {
   const fetchMe = useAuthStore((state) => state.fetchMe);
 
@@ -66,6 +95,7 @@ const AppRoutes = () => {
   return (
     <>
       <SessionWatcher />
+      <CallWatcher />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
