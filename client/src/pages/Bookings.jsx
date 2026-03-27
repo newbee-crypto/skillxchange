@@ -257,7 +257,7 @@ const Bookings = () => {
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-2 lg:ml-4">
+                  <div className="flex w-full flex-wrap justify-end gap-2 lg:ml-4 lg:w-auto lg:flex-nowrap">
                     {b.status === 'pending' && isProvider && (
                       <>
                         <button onClick={() => handleStatus(b._id, 'accepted')} className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors" title="Accept">
