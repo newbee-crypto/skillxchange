@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, MessageCircle, Calendar, User, LogOut, Zap, Menu, X } from 'lucide-react';
 import useAuthStore from '../store/authStore';
+import { resolveAssetUrl } from '../services/api';
 
 const Navbar = () => {
   const { user, logout } = useAuthStore();
@@ -63,7 +64,7 @@ const Navbar = () => {
           <div className="hidden md:flex items-center gap-3">
             <div className="flex items-center gap-2">
               {user?.avatar ? (
-                <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full object-cover" />
+                <img src={resolveAssetUrl(user.avatar)} alt={user.name} className="w-8 h-8 rounded-full object-cover" />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-semibold">
                   {user?.name?.[0]?.toUpperCase()}
@@ -118,7 +119,7 @@ const Navbar = () => {
               <div className="flex items-center justify-between px-3 py-2">
                 <div className="flex items-center gap-2">
                   {user?.avatar ? (
-                    <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full object-cover" />
+                    <img src={resolveAssetUrl(user.avatar)} alt={user.name} className="w-8 h-8 rounded-full object-cover" />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-semibold">
                       {user?.name?.[0]?.toUpperCase()}

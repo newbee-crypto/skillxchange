@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MapPin, Star, Plus, X, MessageCircle, Video, Edit3, Save, Camera, Upload } from 'lucide-react';
 import useAuthStore from '../store/authStore';
-import api from '../services/api';
+import api, { resolveAssetUrl } from '../services/api';
 import toast from 'react-hot-toast';
 
 const Profile = () => {
@@ -16,6 +16,7 @@ const Profile = () => {
   const [newSkill, setNewSkill] = useState({ name: '', category: 'General', level: 'intermediate' });
   const [showSkillForm, setShowSkillForm] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState(Date.now());
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -66,8 +67,10 @@ const Profile = () => {
       const { data } = await api.post('/upload/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      updateUser(data.user);
-      setUser(data.user);
+      const updatedUser = { ...data.user, avatar: data.avatarUrl || data.user.avatar };
+      updateUser(updatedUser);
+      setUser(updatedUser);
+      setAvatarVersion(Date.now());
       toast.success('Profile image updated!');
     } catch (err) {
       toast.error(err.response?.data?.error || 'Upload failed');
@@ -110,6 +113,7 @@ const Profile = () => {
   };
 
   const hasAvatar = user.avatar && user.avatar.length > 0;
+  const avatarSrc = hasAvatar ? `${resolveAssetUrl(user.avatar)}?v=${avatarVersion}` : '';
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 fade-in">
@@ -121,7 +125,7 @@ const Profile = () => {
           <div className="relative flex-shrink-0 group">
             {hasAvatar ? (
               <img
-                src={user.avatar}
+                src={avatarSrc}
                 alt={user.name}
                 className="w-20 h-20 rounded-2xl object-cover shadow-lg shadow-primary-500/20"
               />

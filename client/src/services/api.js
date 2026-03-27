@@ -4,6 +4,12 @@ const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
 export const AUTH_UNAUTHORIZED_EVENT = 'auth:unauthorized';
 let unauthorizedDispatched = false;
 
+export const resolveAssetUrl = (url = '') => {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return backendUrl ? `${backendUrl}${url}` : url;
+};
+
 const api = axios.create({
   baseURL: `${backendUrl}/api`,
   headers: { 'Content-Type': 'application/json' },
