@@ -163,14 +163,31 @@ const VideoCall = () => {
     };
 
     pc.onconnectionstatechange = () => {
-      if (['connected', 'completed'].includes(pc.connectionState)) {
+      if (pc.connectionState === 'connected') {
         setCallState('connected');
         setIncomingCall(null);
         clearTimeout(callTimeoutRef.current);
         setCallStatusText(`In call with ${remoteUser?.name || 'participant'}`);
+        clearInterval(timerRef.current);
         timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
       }
       if (['disconnected', 'failed'].includes(pc.connectionState)) {
+        toast.error('Connection lost');
+        resetCallState('Connection lost');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (['connected', 'completed'].includes(pc.iceConnectionState)) {
+        setCallState('connected');
+        setIncomingCall(null);
+        clearTimeout(callTimeoutRef.current);
+        setCallStatusText(`In call with ${remoteUser?.name || 'participant'}`);
+        clearInterval(timerRef.current);
+        timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+      }
+
+      if (['disconnected', 'failed', 'closed'].includes(pc.iceConnectionState)) {
         toast.error('Connection lost');
         resetCallState('Connection lost');
       }
@@ -283,12 +300,15 @@ const VideoCall = () => {
   };
 
   const handleIceCandidate = async (data) => {
-    if (peerConnectionRef.current) {
-      if (peerConnectionRef.current.remoteDescription) {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-      } else {
-        pendingIceCandidatesRef.current.push(data.candidate);
-      }
+    if (!peerConnectionRef.current) {
+      pendingIceCandidatesRef.current.push(data.candidate);
+      return;
+    }
+
+    if (peerConnectionRef.current.remoteDescription) {
+      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } else {
+      pendingIceCandidatesRef.current.push(data.candidate);
     }
   };
 
