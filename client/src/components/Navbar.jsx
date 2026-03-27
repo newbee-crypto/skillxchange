@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Home, Search, MessageCircle, Video, Calendar, User, LogOut, Zap, Menu, X } from 'lucide-react';
+import { Home, Search, MessageCircle, Calendar, User, LogOut, Zap, Menu, X } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 
 const Navbar = () => {
@@ -18,7 +18,6 @@ const Navbar = () => {
     { to: '/', icon: Home, label: 'Dashboard' },
     { to: '/search', icon: Search, label: 'Explore' },
     { to: '/chat', icon: MessageCircle, label: 'Chat' },
-    { to: '/video', icon: Video, label: 'Video' },
     { to: '/bookings', icon: Calendar, label: 'Bookings' },
     { to: '/profile', icon: User, label: 'Profile' },
   ];

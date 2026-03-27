@@ -230,6 +230,7 @@ const Bookings = () => {
             const isProvider = b.provider?._id === me._id;
             const isRequester = b.requester?._id === me._id;
             const otherUser = isProvider ? b.requester : b.provider;
+            const canJoinSession = b.status === 'accepted' && (b.price <= 0 || b.paymentStatus === 'paid');
 
             return (
               <div key={b._id} className="glass rounded-xl p-5 glass-hover transition-all">
@@ -269,9 +270,11 @@ const Bookings = () => {
                     )}
                     {b.status === 'accepted' && (
                       <>
-                        <Link to={`/video/${b._id}`} className="p-2 rounded-lg bg-primary-600/20 text-primary-400 hover:bg-primary-600/30 transition-colors" title="Join Video">
-                          <Video className="w-4 h-4" />
-                        </Link>
+                        {canJoinSession && (
+                          <Link to={`/video/${b._id}`} className="p-2 rounded-lg bg-primary-600/20 text-primary-400 hover:bg-primary-600/30 transition-colors" title="Join Video">
+                            <Video className="w-4 h-4" />
+                          </Link>
+                        )}
                         {b.price > 0 && b.paymentStatus !== 'paid' && isRequester && (
                           <Link to={`/payment/${b._id}`} className="p-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors" title="Pay">
                             <CreditCard className="w-4 h-4" />

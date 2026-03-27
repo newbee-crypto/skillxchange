@@ -111,7 +111,7 @@ const AppRoutes = () => {
                   <Route path="/search" element={<Search />} />
                   <Route path="/chat" element={<Chat />} />
                   <Route path="/chat/:userId" element={<Chat />} />
-                  <Route path="/video" element={<VideoCall />} />
+                  <Route path="/video" element={<Navigate to="/bookings" replace />} />
                   <Route path="/video/:bookingId" element={<VideoCall />} />
                   <Route path="/bookings" element={<Bookings />} />
                   <Route path="/payment/:bookingId" element={<Payment />} />

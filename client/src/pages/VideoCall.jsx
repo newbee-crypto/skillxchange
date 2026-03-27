@@ -486,6 +486,7 @@ const VideoCall = () => {
   const canUseBookingCall = Boolean(
     booking &&
     booking.status === 'accepted' &&
+    (booking.price <= 0 || booking.paymentStatus === 'paid') &&
     (booking.requester?._id === me?._id || booking.provider?._id === me?._id)
   );
   const isBookingTargetOnline = bookingTargetUser?._id ? onlineUsers.includes(bookingTargetUser._id) : false;
@@ -528,7 +529,7 @@ const VideoCall = () => {
 
           {!canUseBookingCall ? (
             <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-              Video call becomes available only after the booking is accepted.
+              Video call becomes available only after the booking is accepted and payment is completed.
             </div>
           ) : (
             <button
