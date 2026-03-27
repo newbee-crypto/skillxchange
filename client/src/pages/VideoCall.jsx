@@ -36,6 +36,8 @@ const VideoCall = () => {
   const { user: me, token } = useAuthStore();
 
   const [callState, setCallState] = useState('idle'); // idle, calling, connected
+  const [booking, setBooking] = useState(null);
+  const [bookingLoading, setBookingLoading] = useState(false);
   const [remoteUser, setRemoteUser] = useState(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
@@ -63,6 +65,25 @@ const VideoCall = () => {
       });
     }
   }, [bookingId]);
+
+  useEffect(() => {
+    if (!bookingId) return;
+
+    const fetchBooking = async () => {
+      setBookingLoading(true);
+      try {
+        const { data } = await api.get(`/bookings/${bookingId}`);
+        setBooking(data.booking);
+      } catch (err) {
+        toast.error(err.response?.data?.error || 'Booking not found');
+        navigate('/bookings');
+      } finally {
+        setBookingLoading(false);
+      }
+    };
+
+    fetchBooking();
+  }, [bookingId, navigate]);
 
   const cleanup = useCallback(() => {
     if (localStreamRef.current) {
@@ -395,6 +416,75 @@ const VideoCall = () => {
                 );
               })}
             </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const bookingTargetUser = booking
+    ? (booking.requester?._id === me?._id ? booking.provider : booking.requester)
+    : null;
+  const canUseBookingCall = Boolean(
+    booking &&
+    booking.status === 'accepted' &&
+    (booking.requester?._id === me?._id || booking.provider?._id === me?._id)
+  );
+  const isBookingTargetOnline = bookingTargetUser?._id ? onlineUsers.includes(bookingTargetUser._id) : false;
+
+  if (bookingId && bookingLoading) {
+    return (
+      <div className="text-center py-20">
+        <div className="w-8 h-8 border-2 border-primary-500/30 border-t-primary-500 rounded-full animate-spin mx-auto" />
+      </div>
+    );
+  }
+
+  if (callState === 'idle' && bookingId) {
+    return (
+      <div className="max-w-2xl mx-auto py-12 fade-in">
+        <div className="glass rounded-2xl p-6 space-y-5">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Session Video Call</h1>
+            <p className="text-dark-100 mt-1">
+              {booking?.skill ? `${booking.skill} session` : 'Booking session'}
+            </p>
+          </div>
+
+          <div className="bg-dark-600 rounded-xl p-4 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-dark-100">Other person</span>
+              <span className="text-white">{bookingTargetUser?.name || 'Unknown'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-dark-100">Status</span>
+              <span className="text-white capitalize">{booking?.status || 'Unknown'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-dark-100">Availability</span>
+              <span className={isBookingTargetOnline ? 'text-emerald-400' : 'text-amber-300'}>
+                {isBookingTargetOnline ? 'Online' : 'Offline'}
+              </span>
+            </div>
+          </div>
+
+          {!canUseBookingCall ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              Video call becomes available only after the booking is accepted.
+            </div>
+          ) : (
+            <button
+              onClick={() => startCall(bookingTargetUser._id, bookingTargetUser.name)}
+              disabled={!isBookingTargetOnline}
+              className={`w-full py-3 rounded-xl font-medium flex items-center justify-center gap-2 transition-colors ${
+                isBookingTargetOnline
+                  ? 'bg-primary-600 text-white hover:bg-primary-500'
+                  : 'bg-dark-500 text-dark-300 cursor-not-allowed'
+              }`}
+            >
+              <Video className="w-5 h-5" />
+              {isBookingTargetOnline ? 'Start Session Call' : 'Waiting For Other Person To Come Online'}
+            </button>
           )}
         </div>
       </div>
