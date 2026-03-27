@@ -13,6 +13,10 @@ body {
   background: #101113;
   color: #c1c2c5;
   min-height: 100vh;
+  background-image:
+    radial-gradient(circle at top, rgba(76, 110, 245, 0.12), transparent 28%),
+    radial-gradient(circle at bottom right, rgba(16, 185, 129, 0.08), transparent 24%);
+  background-attachment: fixed;
 }
 
 ::-webkit-scrollbar {
@@ -39,6 +43,12 @@ body {
 .glass-hover:hover {
   background: rgba(37, 38, 43, 0.9);
   border-color: rgba(92, 124, 250, 0.3);
+}
+
+.soft-panel {
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
 }
 
 /* Gradient text */

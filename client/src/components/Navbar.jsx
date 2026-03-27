@@ -36,7 +36,10 @@ const Navbar = () => {
             <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center group-hover:scale-110 transition-transform">
               <Zap className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <span className="text-base sm:text-lg font-bold gradient-text">SkillExchange</span>
+            <div className="leading-tight">
+              <span className="block text-base sm:text-lg font-bold gradient-text">SkillExchange</span>
+              <span className="hidden sm:block text-[10px] uppercase tracking-[0.22em] text-dark-200">Live Learning Sessions</span>
+            </div>
           </Link>
 
           {/* Desktop Nav Links */}

@@ -144,7 +144,31 @@ const Search = () => {
     <div className="space-y-6 fade-in">
       <div>
         <h1 className="text-2xl font-bold text-white mb-1">Explore Skills</h1>
-        <p className="text-dark-100">Find experts and learners across the community</p>
+        <p className="text-dark-100">Find people to learn from, chat with, and book for a live skill session</p>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="glass rounded-2xl p-4 lg:col-span-2">
+          <p className="text-xs uppercase tracking-[0.2em] text-primary-300">How To Use Explore</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-dark-600/80 p-3">
+              <p className="text-sm font-semibold text-white">1. Search by skill</p>
+              <p className="mt-1 text-xs leading-5 text-dark-100">Try skill names, categories, or a person you already know.</p>
+            </div>
+            <div className="rounded-xl bg-dark-600/80 p-3">
+              <p className="text-sm font-semibold text-white">2. Check profile</p>
+              <p className="mt-1 text-xs leading-5 text-dark-100">View their skill level, bio, and whether they are online now.</p>
+            </div>
+            <div className="rounded-xl bg-dark-600/80 p-3">
+              <p className="text-sm font-semibold text-white">3. Chat or book</p>
+              <p className="mt-1 text-xs leading-5 text-dark-100">Message first or directly create a session booking from the profile.</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-2xl border border-emerald-400/15 bg-emerald-500/10 p-4">
+          <p className="text-sm font-semibold text-white">Booking flow</p>
+          <p className="mt-1 text-sm text-dark-100">After the provider accepts, payment unlocks and the live session button becomes available.</p>
+        </div>
       </div>
 
       <form onSubmit={handleSearch} className="space-y-4">
@@ -289,7 +313,7 @@ const Search = () => {
                     <MessageCircle className="w-3.5 h-3.5" /> Chat
                   </Link>
                   <Link to={`/profile/${u._id}`} className="flex-1 py-2 bg-dark-500 text-dark-50 rounded-lg text-sm font-medium text-center hover:bg-dark-400 transition-colors">
-                    View
+                    View Profile
                   </Link>
                 </div>
               </div>

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, Calendar, MessageCircle, TrendingUp, Sparkles, ArrowRight } from 'lucide-react';
+import { Users, Calendar, TrendingUp, Sparkles, ArrowRight, Search, Wallet, Video, CheckCircle2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import api from '../services/api';
 import { connectSocket } from '../services/socket';
@@ -31,6 +31,37 @@ const StatCardSkeleton = () => (
   </div>
 );
 
+const flowSteps = [
+  {
+    icon: Search,
+    title: 'Explore Experts',
+    text: 'Browse profiles and see what people can teach.',
+    to: '/search',
+    cta: 'Start exploring',
+  },
+  {
+    icon: Calendar,
+    title: 'Book A Session',
+    text: 'Pick a skill, time, duration, and send a request.',
+    to: '/bookings',
+    cta: 'Open bookings',
+  },
+  {
+    icon: Wallet,
+    title: 'Pay After Approval',
+    text: 'Payment unlocks only when the provider accepts.',
+    to: '/bookings',
+    cta: 'See requests',
+  },
+  {
+    icon: Video,
+    title: 'Join The Call',
+    text: 'Attend the private live session after acceptance and payment.',
+    to: '/bookings',
+    cta: 'Join sessions',
+  },
+];
+
 const Dashboard = () => {
   const { user, token } = useAuthStore();
   const [stats, setStats] = useState({ users: 0, bookings: 0, messages: 0 });
@@ -57,10 +88,10 @@ const Dashboard = () => {
 
         if (usersRes.status === 'fulfilled') {
           setRecentUsers(usersRes.value.data.users || []);
-          setStats(s => ({ ...s, users: usersRes.value.data.pagination?.total || 0 }));
+          setStats((s) => ({ ...s, users: usersRes.value.data.pagination?.total || 0 }));
         }
         if (bookingsRes.status === 'fulfilled') {
-          setStats(s => ({ ...s, bookings: bookingsRes.value.data.bookings?.length || 0 }));
+          setStats((s) => ({ ...s, bookings: bookingsRes.value.data.bookings?.length || 0 }));
         }
         if (aiRes.status === 'fulfilled') {
           setSuggestions(aiRes.value.data.suggestions || []);
@@ -105,41 +136,64 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8 fade-in">
-      {/* Hero */}
-      <div className="glass rounded-2xl p-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary-600/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-        <div className="relative">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Welcome back, <span className="gradient-text">{user?.name}</span> 👋
-          </h1>
-          {loading ? (
-            <>
-              <div className="h-5 w-full max-w-xl bg-dark-600 rounded mt-3" />
-              <div className="h-5 w-3/4 max-w-lg bg-dark-600 rounded mt-2" />
-              <div className="flex gap-3 mt-6">
-                <div className="h-11 w-36 bg-dark-500 rounded-xl" />
-                <div className="h-11 w-28 bg-dark-600 rounded-xl" />
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="text-dark-100 text-lg max-w-xl">
-                Discover new skills, connect with experts, and accelerate your learning journey.
+      <div className="relative overflow-hidden rounded-[28px] border border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(77,124,255,0.28),_transparent_34%),radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.16),_transparent_28%),linear-gradient(135deg,_rgba(12,14,19,0.96),_rgba(25,29,38,0.96))] p-8 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:22px_22px] opacity-20" />
+        <div className="relative grid gap-8 lg:grid-cols-[1.55fr_0.95fr] lg:items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary-400/20 bg-primary-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-primary-200">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Skill Learning Marketplace
+            </div>
+            <h1 className="mt-5 max-w-3xl text-3xl font-bold leading-tight text-white sm:text-4xl lg:text-[2.8rem]">
+              Book live skill sessions, pay after approval, and learn directly from people.
+            </h1>
+            {loading ? (
+              <>
+                <div className="h-5 w-full max-w-xl bg-dark-600 rounded mt-4" />
+                <div className="h-5 w-3/4 max-w-lg bg-dark-600 rounded mt-2" />
+              </>
+            ) : (
+              <p className="mt-4 max-w-2xl text-base text-dark-100 sm:text-lg">
+                SkillExchange helps users discover experts, request a session, pay after acceptance, and join a private peer-to-peer video call when the booking is ready.
               </p>
-              <div className="flex gap-3 mt-6">
-                <Link to="/search" className="px-5 py-2.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-medium rounded-xl hover:from-primary-500 hover:to-primary-400 transition-all flex items-center gap-2 shadow-lg shadow-primary-500/20">
-                  Explore Skills <ArrowRight className="w-4 h-4" />
-                </Link>
-                <Link to="/profile" className="px-5 py-2.5 bg-dark-500 text-dark-50 font-medium rounded-xl hover:bg-dark-400 transition-colors">
-                  Edit Profile
-                </Link>
+            )}
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link to="/search" className="px-5 py-3 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-medium rounded-xl hover:from-primary-500 hover:to-primary-400 transition-all flex items-center gap-2 shadow-lg shadow-primary-500/20">
+                Explore Skills <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link to="/bookings" className="px-5 py-3 bg-white/6 text-dark-50 font-medium rounded-xl hover:bg-white/10 transition-colors">
+                Understand The Flow
+              </Link>
+              <Link to="/profile" className="px-5 py-3 bg-dark-500/80 text-dark-50 font-medium rounded-xl hover:bg-dark-400 transition-colors">
+                Update Profile
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid gap-3">
+            <div className="rounded-2xl border border-white/8 bg-white/5 p-4">
+              <p className="text-xs uppercase tracking-[0.22em] text-dark-200">How It Works</p>
+              <div className="mt-4 space-y-3">
+                {['Explore people', 'Send booking request', 'Get accepted', 'Pay securely', 'Join live session'].map((step, index) => (
+                  <div key={step} className="flex items-start gap-3">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary-500/15 text-sm font-semibold text-primary-200">
+                      {index + 1}
+                    </div>
+                    <p className="text-sm text-dark-50">{step}</p>
+                  </div>
+                ))}
               </div>
-            </>
-          )}
+            </div>
+            <div className="rounded-2xl border border-emerald-400/12 bg-emerald-500/8 p-4">
+              <p className="text-sm font-semibold text-white">Best first move</p>
+              <p className="mt-1 text-sm text-dark-100">
+                Add strong skills to your profile, then explore users who match what you want to learn.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {loading ? (
           <>
@@ -156,7 +210,32 @@ const Dashboard = () => {
         )}
       </div>
 
-      {/* AI Suggestions */}
+      <div className="glass rounded-2xl p-6">
+        <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Quick Start Guide</h2>
+            <p className="text-sm text-dark-100 mt-1">Enough guidance to help new users navigate on their own.</p>
+          </div>
+          <Link to="/search" className="text-primary-400 text-sm hover:text-primary-300 transition-colors flex items-center gap-1">
+            Start now <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {flowSteps.map(({ icon: Icon, title, text, to, cta }) => (
+            <Link key={title} to={to} className="group rounded-2xl border border-white/6 bg-dark-600/70 p-5 transition-all hover:border-primary-500/25 hover:-translate-y-1">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500/25 to-emerald-500/15 text-primary-200">
+                <Icon className="w-5 h-5" />
+              </div>
+              <h3 className="mt-4 text-white font-semibold">{title}</h3>
+              <p className="mt-2 text-sm text-dark-100 leading-6">{text}</p>
+              <div className="mt-4 text-sm font-medium text-primary-300 flex items-center gap-1">
+                {cta} <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+
       {suggestions.length > 0 && (
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center gap-2 mb-4">
@@ -174,11 +253,13 @@ const Dashboard = () => {
         </div>
       )}
 
-      {/* Recent Users */}
       {recentUsers.length > 0 && (
         <div className="glass rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Discover People</h2>
+            <div>
+              <h2 className="text-lg font-semibold text-white">People You Can Learn From</h2>
+              <p className="text-sm text-dark-100 mt-1">Start with a profile, then chat or book a session.</p>
+            </div>
             <Link to="/search" className="text-primary-400 text-sm hover:text-primary-300 transition-colors flex items-center gap-1">
               View all <ArrowRight className="w-3 h-3" />
             </Link>
