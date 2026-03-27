@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Users } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { connectSocket, getSocket } from '../services/socket';
@@ -132,6 +132,13 @@ const VideoCall = () => {
   const createPeerConnection = useCallback((targetUserId) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     const socket = getSocket();
+    const remoteStream = new MediaStream();
+    remoteStreamRef.current = remoteStream;
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      remoteVideoRef.current.play?.().catch(() => {});
+    }
 
     pc.onicecandidate = (e) => {
       if (e.candidate) {
@@ -143,15 +150,20 @@ const VideoCall = () => {
     };
 
     pc.ontrack = (e) => {
-      remoteStreamRef.current = e.streams[0];
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = e.streams[0];
+      e.streams[0]?.getTracks().forEach((track) => {
+        remoteStream.addTrack(track);
+      });
+      if (e.track && !remoteStream.getTracks().some((track) => track.id === e.track.id)) {
+        remoteStream.addTrack(e.track);
+      }
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject !== remoteStream) {
+        remoteVideoRef.current.srcObject = remoteStream;
         remoteVideoRef.current.play?.().catch(() => {});
       }
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'connected') {
+      if (['connected', 'completed'].includes(pc.connectionState)) {
         setCallState('connected');
         setIncomingCall(null);
         clearTimeout(callTimeoutRef.current);
