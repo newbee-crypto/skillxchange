@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Send, Sparkles, Phone, ArrowLeft } from 'lucide-react';
+import { Send, Sparkles, Phone, ArrowLeft, MessageSquareText, Wand2 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import { connectSocket, getSocket } from '../services/socket';
 import api, { resolveAssetUrl } from '../services/api';
@@ -25,6 +25,12 @@ const Chat = () => {
   const activeRoomRef = useRef(null);
   const shouldStickToBottomRef = useRef(true);
   const preserveScrollRef = useRef(null);
+
+  const quickPrompts = [
+    'Hi, I want to learn this skill from you.',
+    'Are you available this week for a session?',
+    'Can you share what this session usually covers?',
+  ];
 
   const getRoomId = (id1, id2) => [id1, id2].sort().join('_');
   const loadHistoryPage = useCallback(async (roomId, page, mode = 'replace') => {
@@ -308,7 +314,7 @@ const Chat = () => {
       setMessages((prev) => [...prev, {
         _id: `summary-${Date.now()}`,
         sender: { _id: 'ai', name: 'AI Assistant' },
-        content: `📋 **Summary**: ${data.summary}`,
+        content: `Summary: ${data.summary}`,
         type: 'ai-summary',
         createdAt: new Date().toISOString(),
       }]);
@@ -332,18 +338,33 @@ const Chat = () => {
     }
   };
 
+  const applyQuickPrompt = (prompt) => {
+    setInput(prompt);
+    document.getElementById('chat-input')?.focus();
+  };
+
   return (
     <div className="flex h-[calc(100vh-8rem)] gap-0 sm:gap-4 fade-in">
       <div className={`${showSidebar ? 'flex' : 'hidden'} sm:flex w-full sm:w-72 glass rounded-2xl flex-col shrink-0 overflow-hidden`}>
-        <div className="p-4 border-b border-dark-400">
+        <div className="border-b border-dark-400 p-4">
           <h2 className="text-lg font-semibold text-white">Messages</h2>
+          <p className="mt-1 text-xs text-dark-200">Chat first, then move to booking when you are ready.</p>
         </div>
         <div className="flex-1 overflow-y-auto py-2">
+          {conversations.length === 0 && (
+            <div className="px-4 py-8 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-dark-500 text-dark-200">
+                <MessageSquareText className="w-6 h-6" />
+              </div>
+              <p className="text-sm text-white">No conversations yet</p>
+              <p className="mt-1 text-xs text-dark-200">Go to Explore and send your first message.</p>
+            </div>
+          )}
           {conversations.map((u) => (
             <button
               key={u._id}
               onClick={() => handleSelectUser(u)}
-              className={`w-full flex items-center gap-3 px-4 py-3 transition-colors text-left ${activeChat?._id === u._id ? 'bg-primary-600/20' : 'hover:bg-dark-500'}`}
+              className={`w-full flex items-center gap-3 border-l-2 px-4 py-3 text-left transition-colors ${activeChat?._id === u._id ? 'border-primary-400 bg-primary-600/20' : 'border-transparent hover:bg-dark-500'}`}
             >
               <div className="relative flex-shrink-0">
                 {u.avatar ? (
@@ -355,19 +376,20 @@ const Chat = () => {
                 )}
                 {u.isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-dark-600 pulse-dot" />}
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm text-white font-medium truncate">{u.name}</p>
+                  <p className="truncate text-sm font-medium text-white">{u.name}</p>
                   {u.lastMessageAt && (
-                    <span className="text-[10px] text-dark-300 whitespace-nowrap">
+                    <span className="whitespace-nowrap text-[10px] text-dark-300">
                       {new Date(u.lastMessageAt).toLocaleDateString()}
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-dark-200 truncate">
+                <p className="truncate text-xs text-dark-200">
                   {u.lastMessage || u.skills?.[0]?.name || 'Start a conversation'}
                 </p>
               </div>
+              {u.isOnline && <span className="hidden rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300 sm:inline-flex">Live</span>}
             </button>
           ))}
         </div>
@@ -375,49 +397,63 @@ const Chat = () => {
 
       {activeChat ? (
         <div className={`${!showSidebar ? 'flex' : 'hidden'} sm:flex flex-1 glass rounded-2xl flex-col overflow-hidden`}>
-          <div className="flex items-center justify-between p-3 sm:p-4 border-b border-dark-400">
+          <div className="flex items-center justify-between border-b border-dark-400 bg-dark-700/30 p-3 sm:p-4">
             <div className="flex items-center gap-3">
-              <button onClick={handleBackToList} className="sm:hidden p-2 rounded-lg text-dark-100 hover:bg-dark-500 transition-colors -ml-1">
+              <button onClick={handleBackToList} className="sm:hidden -ml-1 rounded-lg p-2 text-dark-100 transition-colors hover:bg-dark-500">
                 <ArrowLeft className="w-5 h-5" />
               </button>
               {activeChat.avatar ? (
-                <img src={resolveAssetUrl(activeChat.avatar)} alt={activeChat.name} className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover" />
+                <img src={resolveAssetUrl(activeChat.avatar)} alt={activeChat.name} className="w-9 h-9 rounded-full object-cover sm:h-10 sm:w-10" />
               ) : (
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white font-semibold text-sm sm:text-base">
+                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-primary-400 to-primary-600 text-sm font-semibold text-white sm:h-10 sm:w-10 sm:text-base">
                   {activeChat.name?.[0]?.toUpperCase()}
                 </div>
               )}
               <div>
-                <p className="text-white font-medium text-sm sm:text-base">{activeChat.name}</p>
-                <p className="text-xs text-dark-200">{activeChat.isOnline ? '🟢 Online' : '⚪ Offline'}</p>
+                <p className="text-sm font-medium text-white sm:text-base">{activeChat.name}</p>
+                <p className="text-xs text-dark-200">{activeChat.isOnline ? 'Online now' : 'Offline right now'}</p>
               </div>
             </div>
             <div className="flex items-center gap-1 sm:gap-2">
-              <button onClick={handleSummarize} disabled={summarizing} className="p-2 rounded-lg text-primary-400 hover:bg-primary-600/20 transition-colors" title="AI Summarize">
-                <Sparkles className={`w-4 h-4 sm:w-5 sm:h-5 ${summarizing ? 'animate-spin' : ''}`} />
+              <button onClick={handleSummarize} disabled={summarizing} className="rounded-lg p-2 text-primary-400 transition-colors hover:bg-primary-600/20" title="AI Summarize">
+                <Sparkles className={`h-4 w-4 sm:h-5 sm:w-5 ${summarizing ? 'animate-spin' : ''}`} />
               </button>
-              <button className="p-2 rounded-lg text-dark-100 hover:bg-dark-500 transition-colors">
-                <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+              <button className="rounded-lg p-2 text-dark-100 transition-colors hover:bg-dark-500">
+                <Phone className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           </div>
 
-          <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
+          <div ref={messagesContainerRef} onScroll={handleMessagesScroll} className="flex-1 space-y-3 overflow-y-auto p-3 sm:p-4">
             {historyPage < historyPages && (
               <div className="flex justify-center">
                 <button
                   onClick={handleLoadOlder}
                   disabled={loadingOlder}
-                  className="px-3 py-1.5 rounded-lg bg-dark-500 text-dark-50 text-xs hover:bg-dark-400 transition-colors disabled:opacity-60"
+                  className="rounded-lg bg-dark-500 px-3 py-1.5 text-xs text-dark-50 transition-colors hover:bg-dark-400 disabled:opacity-60"
                 >
                   {loadingOlder ? 'Loading...' : 'Load older messages'}
                 </button>
               </div>
             )}
             {messages.length === 0 && (
-              <div className="text-center py-12 sm:py-20">
-                <p className="text-dark-200">No messages yet</p>
-                <p className="text-dark-300 text-sm">Say hello to start the conversation! 👋</p>
+              <div className="py-12 text-center sm:py-20">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-500/10 text-primary-300">
+                  <Wand2 className="w-7 h-7" />
+                </div>
+                <p className="text-lg text-dark-50">Start the conversation</p>
+                <p className="text-sm text-dark-300">Ask about the skill, session plan, or availability.</p>
+                <div className="mt-4 flex flex-wrap justify-center gap-2">
+                  {quickPrompts.map((prompt) => (
+                    <button
+                      key={prompt}
+                      onClick={() => applyQuickPrompt(prompt)}
+                      className="rounded-full bg-dark-500 px-3 py-1.5 text-xs text-dark-50 transition-colors hover:bg-dark-400"
+                    >
+                      {prompt}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {messages.map((msg) => {
@@ -425,12 +461,12 @@ const Chat = () => {
               const isAI = msg.type === 'ai-summary';
               return (
                 <div key={msg._id || msg.createdAt} className={`flex ${isAI ? 'justify-center' : isOwn ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] sm:max-w-[70%] px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl text-sm ${
-                    isAI ? 'bg-primary-600/20 text-primary-200 border border-primary-500/20' :
-                    isOwn ? 'bg-primary-600 text-white rounded-br-md' :
-                    'bg-dark-500 text-dark-50 rounded-bl-md'
+                  <div className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm sm:max-w-[70%] sm:px-4 sm:py-2.5 ${
+                    isAI ? 'border border-primary-500/20 bg-primary-600/20 text-primary-200' :
+                    isOwn ? 'rounded-br-md bg-primary-600 text-white shadow-lg shadow-primary-500/10' :
+                    'rounded-bl-md bg-dark-500 text-dark-50'
                   }`}>
-                    {!isOwn && !isAI && <p className="text-xs text-primary-400 font-medium mb-1">{msg.sender?.name}</p>}
+                    {!isOwn && !isAI && <p className="mb-1 text-xs font-medium text-primary-400">{msg.sender?.name}</p>}
                     <p className="whitespace-pre-wrap break-words">{msg.content}</p>
                     {msg.pending && <p className="mt-1 text-[10px] opacity-70">Sending...</p>}
                   </div>
@@ -438,11 +474,11 @@ const Chat = () => {
               );
             })}
             {typing && (
-              <div className="flex items-center gap-2 text-dark-200 text-sm">
+              <div className="flex items-center gap-2 text-sm text-dark-200">
                 <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 bg-dark-200 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-1.5 h-1.5 bg-dark-200 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-1.5 h-1.5 bg-dark-200 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-dark-200" style={{ animationDelay: '0ms' }} />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-dark-200" style={{ animationDelay: '150ms' }} />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-dark-200" style={{ animationDelay: '300ms' }} />
                 </div>
                 {typing} is typing...
               </div>
@@ -450,7 +486,18 @@ const Chat = () => {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-3 sm:p-4 border-t border-dark-400">
+          <div className="border-t border-dark-400 bg-dark-700/20 p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap gap-2">
+              {quickPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => applyQuickPrompt(prompt)}
+                  className="rounded-full border border-white/6 bg-dark-600 px-3 py-1.5 text-xs text-dark-100 transition-colors hover:border-primary-500/30 hover:text-white"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2 sm:gap-3">
               <input
                 id="chat-input"
@@ -461,23 +508,23 @@ const Chat = () => {
                   handleTyping();
                 }}
                 onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="Type a message..."
-                className="flex-1 px-3 sm:px-4 py-2.5 sm:py-3 bg-dark-700 border border-dark-400 rounded-xl text-white placeholder-dark-200 focus:outline-none focus:border-primary-500 transition-colors text-sm sm:text-base"
+                placeholder="Ask about skill level, pricing, or session details..."
+                className="flex-1 rounded-xl border border-dark-400 bg-dark-700 px-3 py-2.5 text-sm text-white placeholder-dark-200 transition-colors focus:border-primary-500 focus:outline-none sm:px-4 sm:py-3 sm:text-base"
               />
-              <button id="chat-send" onClick={sendMessage} className="px-4 sm:px-5 py-2.5 sm:py-3 bg-primary-600 text-white rounded-xl hover:bg-primary-500 transition-colors">
-                <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+              <button id="chat-send" onClick={sendMessage} className="rounded-xl bg-primary-600 px-4 py-2.5 text-white transition-colors hover:bg-primary-500 sm:px-5 sm:py-3">
+                <Send className="h-4 w-4 sm:h-5 sm:w-5" />
               </button>
             </div>
           </div>
         </div>
       ) : (
         <div className={`${!showSidebar ? 'flex' : 'hidden'} sm:flex flex-1 glass rounded-2xl items-center justify-center`}>
-          <div className="text-center p-8">
-            <div className="w-16 h-16 rounded-2xl bg-dark-500 flex items-center justify-center mx-auto mb-4">
-              <Send className="w-8 h-8 text-dark-200" />
+          <div className="p-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-dark-500 text-dark-200">
+              <MessageSquareText className="w-8 h-8" />
             </div>
-            <p className="text-dark-100 text-lg">Select a conversation</p>
-            <p className="text-dark-300 text-sm">Choose someone from the sidebar to start chatting</p>
+            <p className="text-lg text-dark-100">Select a conversation</p>
+            <p className="text-sm text-dark-300">Choose someone from the sidebar to chat, ask questions, and prepare for booking.</p>
           </div>
         </div>
       )}
