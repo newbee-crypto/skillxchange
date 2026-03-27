@@ -9,13 +9,31 @@ const router = Router();
 // Create payment for booking
 router.post('/create', auth, async (req, res) => {
   try {
-    const { bookingId, amount } = req.body;
+    const { bookingId } = req.body;
 
     const booking = await Booking.findById(bookingId);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
 
+    const isRequester = booking.requester.toString() === req.user._id.toString();
+
+    if (!isRequester) {
+      return res.status(403).json({ error: 'Only the person who booked the session can pay' });
+    }
+
+    if (booking.status !== 'accepted') {
+      return res.status(400).json({ error: 'Payment is available only after the booking is accepted' });
+    }
+
+    if (booking.price <= 0) {
+      return res.status(400).json({ error: 'This booking does not require payment' });
+    }
+
+    if (booking.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Payment has already been completed for this booking' });
+    }
+
     const payment = await createPaymentIntent({
-      amount: amount || booking.price,
+      amount: booking.price,
       bookingId,
     });
 

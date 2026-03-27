@@ -228,6 +228,7 @@ const Bookings = () => {
         <div className="space-y-3">
           {bookings.map((b) => {
             const isProvider = b.provider?._id === me._id;
+            const isRequester = b.requester?._id === me._id;
             const otherUser = isProvider ? b.requester : b.provider;
 
             return (
@@ -271,7 +272,7 @@ const Bookings = () => {
                         <Link to={`/video/${b._id}`} className="p-2 rounded-lg bg-primary-600/20 text-primary-400 hover:bg-primary-600/30 transition-colors" title="Join Video">
                           <Video className="w-4 h-4" />
                         </Link>
-                        {b.price > 0 && b.paymentStatus !== 'paid' && (
+                        {b.price > 0 && b.paymentStatus !== 'paid' && isRequester && (
                           <Link to={`/payment/${b._id}`} className="p-2 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition-colors" title="Pay">
                             <CreditCard className="w-4 h-4" />
                           </Link>

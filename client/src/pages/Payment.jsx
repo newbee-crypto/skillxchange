@@ -4,11 +4,13 @@ import { CreditCard, Check, Shield, Zap } from 'lucide-react';
 import api from '../services/api';
 import useVisibilityRefresh from '../hooks/useVisibilityRefresh';
 import { emitBookingChanged, subscribeToBookingChanges } from '../services/liveUpdates';
+import useAuthStore from '../store/authStore';
 import toast from 'react-hot-toast';
 
 const Payment = () => {
   const { bookingId } = useParams();
   const navigate = useNavigate();
+  const { user: me } = useAuthStore();
   const [booking, setBooking] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [paid, setPaid] = useState(false);
@@ -42,7 +44,6 @@ const Payment = () => {
     try {
       const { data } = await api.post('/payments/create', {
         bookingId,
-        amount: booking.price,
       });
       await api.post('/payments/confirm', { paymentId: data.payment.id });
       setBooking(data.booking);
@@ -50,7 +51,7 @@ const Payment = () => {
       emitBookingChanged(data.booking);
       toast.success('Payment successful!');
     } catch (err) {
-      toast.error('Payment failed');
+      toast.error(err.response?.data?.error || 'Payment failed');
     }
     setProcessing(false);
   };
@@ -83,12 +84,23 @@ const Payment = () => {
     );
   }
 
+  const isRequester = booking.requester?._id === me?._id;
+  const canPay = isRequester && booking.status === 'accepted' && booking.price > 0 && booking.paymentStatus !== 'paid';
+
+  let paymentMessage = '';
+  if (booking.price <= 0) {
+    paymentMessage = 'This booking does not require payment.';
+  } else if (!isRequester) {
+    paymentMessage = 'Only the person who booked this session can complete the payment.';
+  } else if (booking.status !== 'accepted') {
+    paymentMessage = 'Payment will be available after the other person accepts this booking.';
+  }
+
   return (
     <div className="max-w-lg mx-auto fade-in">
       <h1 className="text-2xl font-bold text-white mb-6">Complete Payment</h1>
 
       <div className="glass rounded-2xl p-6 space-y-6">
-        {/* Order Summary */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-white">Order Summary</h3>
           <div className="bg-dark-600 rounded-xl p-4 space-y-3">
@@ -99,6 +111,10 @@ const Payment = () => {
             <div className="flex justify-between">
               <span className="text-dark-100">Provider</span>
               <span className="text-white">{booking.provider?.name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-dark-100">Booked By</span>
+              <span className="text-white">{booking.requester?.name}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-dark-100">Duration</span>
@@ -115,7 +131,6 @@ const Payment = () => {
           </div>
         </div>
 
-        {/* Mock Card Form */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-white">Payment Details</h3>
           <div>
@@ -137,16 +152,20 @@ const Payment = () => {
           </div>
         </div>
 
-        {/* Security note */}
         <div className="flex items-center gap-2 text-dark-200 text-sm">
           <Shield className="w-4 h-4" />
-          <span>Mock payment — no real charges will be made</span>
+          <span>Mock payment - no real charges will be made</span>
         </div>
 
-        {/* Pay Button */}
+        {paymentMessage && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            {paymentMessage}
+          </div>
+        )}
+
         <button
           onClick={handlePay}
-          disabled={processing}
+          disabled={processing || !canPay}
           className="w-full py-3.5 bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold rounded-xl hover:from-primary-500 hover:to-primary-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-primary-500/20"
         >
           {processing ? (
