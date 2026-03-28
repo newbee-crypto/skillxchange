@@ -16,6 +16,7 @@ const Search = () => {
   const [hasLoaded, setHasLoaded] = useState(false);
   const [pagination, setPagination] = useState({ page: Number(searchParams.get('page') || 1), pages: 1, total: 0 });
   const [showFilters, setShowFilters] = useState(Boolean(searchParams.get('skill') || searchParams.get('level')));
+  const [backendError, setBackendError] = useState('');
 
   const levelColors = {
     beginner: 'bg-green-500/20 text-green-300',
@@ -59,8 +60,11 @@ const Search = () => {
       setUsers(data.users || []);
       setPagination(data.pagination || { page: 1, pages: 1, total: 0 });
       setHasLoaded(true);
+      setBackendError('');
     } catch (err) {
       console.error(err);
+      setHasLoaded(true);
+      setBackendError('Search results could not be refreshed because the backend is unavailable.');
     } finally {
       setLoading(false);
     }
@@ -256,6 +260,12 @@ const Search = () => {
           </div>
         )}
       </div>
+
+      {backendError && (
+        <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {backendError}
+        </div>
+      )}
 
       {!hasLoaded && loading ? (
         <div className="text-center py-20">

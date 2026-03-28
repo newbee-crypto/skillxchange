@@ -64,10 +64,11 @@ const flowSteps = [
 
 const Dashboard = () => {
   const { user, token } = useAuthStore();
-  const [stats, setStats] = useState({ users: 0, bookings: 0, messages: 0 });
+  const [stats, setStats] = useState({ users: null, bookings: null, messages: 0 });
   const [suggestions, setSuggestions] = useState([]);
   const [recentUsers, setRecentUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [backendError, setBackendError] = useState('');
 
   const syncRecentUserPresence = useCallback((onlineIds) => {
     setRecentUsers((prev) => prev.map((recentUser) => ({
@@ -86,18 +87,29 @@ const Dashboard = () => {
           api.get('/ai/suggest-skills'),
         ]);
 
+        const hasFailure = [usersRes, bookingsRes, aiRes].some((result) => result.status === 'rejected');
+
         if (usersRes.status === 'fulfilled') {
           setRecentUsers(usersRes.value.data.users || []);
-          setStats((s) => ({ ...s, users: usersRes.value.data.pagination?.total || 0 }));
+          setStats((s) => ({ ...s, users: usersRes.value.data.pagination?.total ?? s.users }));
         }
         if (bookingsRes.status === 'fulfilled') {
-          setStats((s) => ({ ...s, bookings: bookingsRes.value.data.bookings?.length || 0 }));
+          setStats((s) => ({ ...s, bookings: bookingsRes.value.data.bookings?.length ?? s.bookings }));
         }
         if (aiRes.status === 'fulfilled') {
           setSuggestions(aiRes.value.data.suggestions || []);
         }
-      } catch (err) {
-        console.error('Dashboard fetch error:', err);
+
+        if (hasFailure) {
+          console.error('Dashboard fetch error:', {
+            usersRes,
+            bookingsRes,
+            aiRes,
+          });
+          setBackendError('Backend temporarily unavailable. Showing last successful data.');
+        } else {
+          setBackendError('');
+        }
       } finally {
         setLoading(false);
       }
@@ -203,12 +215,18 @@ const Dashboard = () => {
           </>
         ) : (
           <>
-            <StatCard icon={Users} label="Active Users" value={stats.users} color="bg-gradient-to-br from-blue-500 to-blue-600" />
-            <StatCard icon={Calendar} label="Your Bookings" value={stats.bookings} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
+            <StatCard icon={Users} label="Community Users" value={stats.users ?? '--'} color="bg-gradient-to-br from-blue-500 to-blue-600" />
+            <StatCard icon={Calendar} label="Your Bookings" value={stats.bookings ?? '--'} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
             <StatCard icon={TrendingUp} label="Your Skills" value={user?.skills?.length || 0} color="bg-gradient-to-br from-purple-500 to-purple-600" />
           </>
         )}
       </div>
+
+      {backendError && (
+        <div className="rounded-2xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          {backendError}
+        </div>
+      )}
 
       <div className="glass rounded-2xl p-6">
         <div className="flex items-center justify-between gap-4 mb-5 flex-wrap">
