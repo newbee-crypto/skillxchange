@@ -46,7 +46,7 @@ export const setupSocket = (io) => {
 
   io.on('connection', async (socket) => {
     const userId = socket.user._id.toString();
-    console.log(`🟢 ${socket.user.name} connected`);
+    console.log(`${socket.user.name} connected`);
     const existingSession = onlineUsers.get(userId);
     const wasOffline = !existingSession;
 
@@ -84,7 +84,7 @@ export const setupSocket = (io) => {
     // --- CHAT ---
     socket.on('chat:join', (roomId) => {
       socket.join(roomId);
-      console.log(`💬 ${socket.user.name} joined room ${roomId}`);
+      console.log(`${socket.user.name} joined room ${roomId}`);
     });
 
     socket.on('chat:leave', (roomId) => {
@@ -189,7 +189,7 @@ export const setupSocket = (io) => {
 
     // --- DISCONNECT ---
     socket.on('disconnect', async () => {
-      console.log(`🔴 ${socket.user.name} disconnected`);
+      console.log(`${socket.user.name} disconnected`);
       const existingSession = onlineUsers.get(userId);
 
       if (existingSession) {
